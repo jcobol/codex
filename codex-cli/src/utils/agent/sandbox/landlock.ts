@@ -8,6 +8,7 @@ import fs from "fs";
 import path from "path";
 import { log } from "src/utils/logger/log.js";
 import { fileURLToPath } from "url";
+import { CODEX_UNSAFE_ALLOW_NO_SANDBOX } from "../../config.js";
 
 /**
  * Runs Landlock with the following permissions:
@@ -23,7 +24,24 @@ export async function execWithLandlock(
   config: AppConfig,
   abortSignal?: AbortSignal,
 ): Promise<ExecResult> {
-  const sandboxExecutable = await getSandboxExecutable();
+  let sandboxExecutable: string;
+  try {
+    sandboxExecutable = await getSandboxExecutable();
+  } catch (err) {
+    if (CODEX_UNSAFE_ALLOW_NO_SANDBOX) {
+      log(
+        `Linux sandbox unavailable: ${String(
+          err,
+        )}. Falling back to unsandboxed execution.`,
+      );
+      return exec(cmd, opts, config, abortSignal);
+    }
+    return {
+      stdout: "",
+      stderr: String(err),
+      exitCode: 1,
+    };
+  }
 
   const extraSandboxPermissions = userProvidedWritableRoots.flatMap(
     (root: string) => ["--sandbox-permission", `disk-write-folder=${root}`],
