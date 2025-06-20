@@ -22,6 +22,7 @@ import {
 } from "../config.js";
 import { log } from "../logger/log.js";
 import { parseToolCallArguments } from "../parsers.js";
+import { getEnvironmentInfo } from "../platform-info.js";
 import { responsesCreateViaChatCompletions } from "../responses.js";
 import {
   ORIGIN,
@@ -1599,9 +1600,12 @@ export class AgentLoop {
 // Dynamic developer message prefix: includes user, workdir, and rg suggestion.
 const userName = os.userInfo().username;
 const workdir = process.cwd();
+const { platform, shell } = getEnvironmentInfo();
 const dynamicLines: Array<string> = [
   `User: ${userName}`,
   `Workdir: ${workdir}`,
+  `Platform: ${platform}`,
+  `Shell: ${shell}`,
 ];
 if (spawnSync("rg", ["--version"], { stdio: "ignore" }).status === 0) {
   dynamicLines.push(
