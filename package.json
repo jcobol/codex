@@ -32,6 +32,12 @@
   "pnpm": {
     "patchedDependencies": {
       "marked-terminal@7.3.0": "patches/marked-terminal@7.3.0.patch"
+    },
+    "overrides": {
+      "braces": "^3.0.3",
+      "micromatch": "^4.0.8",
+      "semver": "^7.7.1",
+      "@openai/codex": "link:codex-cli"
     }
   },
   "engines": {
@@ -48,5 +54,8 @@
       "cd codex-cli && pnpm run typecheck"
     ]
   },
-  "packageManager": "pnpm@10.8.1"
+  "packageManager": "pnpm@10.8.1",
+  "dependencies": {
+    "@openai/codex": "link:codex-cli"
+  }
 }
