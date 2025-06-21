@@ -37,9 +37,16 @@ pub(crate) async fn stream_chat_completions(
 ) -> Result<ResponseStream> {
     // Build messages array
     let mut messages = Vec::<serde_json::Value>::new();
+    let mut messages_tok = Vec::<tiktoken_rs::ChatCompletionRequestMessage>::new();
 
     let full_instructions = prompt.get_full_instructions(model);
     messages.push(json!({"role": "system", "content": full_instructions}));
+    messages_tok.push(tiktoken_rs::ChatCompletionRequestMessage {
+        role: "system".to_string(),
+        content: Some(full_instructions.to_string()),
+        name: None,
+        function_call: None,
+    });
 
     for item in &prompt.input {
         match item {
@@ -47,14 +54,19 @@ pub(crate) async fn stream_chat_completions(
                 let mut text = String::new();
                 for c in content {
                     match c {
-                        ContentItem::InputText { text: t }
-                        | ContentItem::OutputText { text: t } => {
+                        ContentItem::InputText { text: t } | ContentItem::OutputText { text: t } => {
                             text.push_str(t);
                         }
                         _ => {}
                     }
                 }
                 messages.push(json!({"role": role, "content": text}));
+                messages_tok.push(tiktoken_rs::ChatCompletionRequestMessage {
+                    role: role.clone(),
+                    content: Some(text),
+                    name: None,
+                    function_call: None,
+                });
             }
             ResponseItem::FunctionCall {
                 name,
@@ -73,6 +85,15 @@ pub(crate) async fn stream_chat_completions(
                         }
                     }]
                 }));
+                messages_tok.push(tiktoken_rs::ChatCompletionRequestMessage {
+                    role: "assistant".to_string(),
+                    content: None,
+                    name: None,
+                    function_call: Some(tiktoken_rs::FunctionCall {
+                        name: name.to_string(),
+                        arguments: arguments.to_string(),
+                    }),
+                });
             }
             ResponseItem::LocalShellCall {
                 id,
@@ -91,6 +112,12 @@ pub(crate) async fn stream_chat_completions(
                         "action": action,
                     }]
                 }));
+                messages_tok.push(tiktoken_rs::ChatCompletionRequestMessage {
+                    role: "assistant".to_string(),
+                    content: None,
+                    name: None,
+                    function_call: None,
+                });
             }
             ResponseItem::FunctionCallOutput { call_id, output } => {
                 messages.push(json!({
@@ -98,6 +125,12 @@ pub(crate) async fn stream_chat_completions(
                     "tool_call_id": call_id,
                     "content": output.content,
                 }));
+                messages_tok.push(tiktoken_rs::ChatCompletionRequestMessage {
+                    role: "tool".to_string(),
+                    content: Some(output.content.clone()),
+                    name: None,
+                    function_call: None,
+                });
             }
             ResponseItem::Reasoning { .. } | ResponseItem::Other => {
                 // Omit these items from the conversation history.
@@ -107,6 +140,7 @@ pub(crate) async fn stream_chat_completions(
     }
 
     let tools_json = create_tools_json_for_chat_completions_api(prompt, model)?;
+    let prompt_tokens_est = crate::token_metering::count_prompt_tokens(model, &messages_tok);
     let payload = json!({
         "model": model,
         "messages": messages,
@@ -142,7 +176,7 @@ pub(crate) async fn stream_chat_completions(
             Ok(resp) if resp.status().is_success() => {
                 let (tx_event, rx_event) = mpsc::channel::<Result<ResponseEvent>>(16);
                 let stream = resp.bytes_stream().map_err(CodexErr::Reqwest);
-                tokio::spawn(process_chat_sse(stream, tx_event, model.to_string()));
+                tokio::spawn(process_chat_sse(stream, tx_event, model.to_string(), prompt_tokens_est));
                 return Ok(ResponseStream { rx_event });
             }
             Ok(res) => {
@@ -185,12 +219,15 @@ async fn process_chat_sse<S>(
     stream: S,
     tx_event: mpsc::Sender<Result<ResponseEvent>>,
     model: String,
+    prompt_tokens_est: Option<usize>,
 ) where
     S: Stream<Item = Result<Bytes>> + Unpin,
 {
     let mut stream = stream.eventsource();
 
     let idle_timeout = *OPENAI_STREAM_IDLE_TIMEOUT_MS;
+    let mut completion_tokens_est: usize = 0;
+    let mut usage_recorded = false;
 
     // State to accumulate a function call across streaming chunks.
     // OpenAI may split the `arguments` string over multiple `delta` events
@@ -212,6 +249,11 @@ async fn process_chat_sse<S>(
             Ok(Some(Ok(ev))) => ev,
             Ok(Some(Err(e))) => {
                 let _ = tx_event.send(Err(CodexErr::Stream(e.to_string()))).await;
+                if !usage_recorded {
+                    if let Some(p) = prompt_tokens_est {
+                        crate::token_metering::record_usage(&model, p as u64, completion_tokens_est as u64);
+                    }
+                }
                 return;
             }
             Ok(None) => {
@@ -221,12 +263,22 @@ async fn process_chat_sse<S>(
                         response_id: String::new(),
                     }))
                     .await;
+                if !usage_recorded {
+                    if let Some(p) = prompt_tokens_est {
+                        crate::token_metering::record_usage(&model, p as u64, completion_tokens_est as u64);
+                    }
+                }
                 return;
             }
             Err(_) => {
                 let _ = tx_event
                     .send(Err(CodexErr::Stream("idle timeout waiting for SSE".into())))
                     .await;
+                if !usage_recorded {
+                    if let Some(p) = prompt_tokens_est {
+                        crate::token_metering::record_usage(&model, p as u64, completion_tokens_est as u64);
+                    }
+                }
                 return;
             }
         };
@@ -238,6 +290,11 @@ async fn process_chat_sse<S>(
                     response_id: String::new(),
                 }))
                 .await;
+            if !usage_recorded {
+                if let Some(p) = prompt_tokens_est {
+                    crate::token_metering::record_usage(&model, p as u64, completion_tokens_est as u64);
+                }
+            }
             return;
         }
 
@@ -253,6 +310,7 @@ async fn process_chat_sse<S>(
                 usage.get("prompt_tokens").and_then(|v| v.as_u64()),
                 usage.get("completion_tokens").and_then(|v| v.as_u64()),
             ) {
+                usage_recorded = true;
                 crate::token_metering::record_usage(&model, p, c);
             }
         }
@@ -266,6 +324,9 @@ async fn process_chat_sse<S>(
                 .and_then(|d| d.get("content"))
                 .and_then(|c| c.as_str())
             {
+                if let Some(t) = crate::token_metering::count_text_tokens(&model, content) {
+                    completion_tokens_est += t;
+                }
                 let item = ResponseItem::Message {
                     role: "assistant".to_string(),
                     content: vec![ContentItem::OutputText {
@@ -332,6 +393,12 @@ async fn process_chat_sse<S>(
                         response_id: String::new(),
                     }))
                     .await;
+
+                if !usage_recorded {
+                    if let Some(p) = prompt_tokens_est {
+                        crate::token_metering::record_usage(&model, p as u64, completion_tokens_est as u64);
+                    }
+                }
 
                 // Prepare for potential next turn (should not happen in same stream).
                 // fn_call_state = FunctionCallState::default();

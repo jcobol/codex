@@ -3,7 +3,8 @@ use std::fs::{File, OpenOptions};
 use std::io::{BufWriter, Write};
 use std::sync::Mutex;
 
-use ctor::{ctor, dtor};
+use ctor::dtor;
+use tiktoken_rs::{get_bpe_from_model, num_tokens_from_messages, ChatCompletionRequestMessage};
 
 /// Environment variable that enables token logging when set to a file path.
 pub const TOKEN_LOG_ENV_VAR: &str = "CODEX_TOKEN_LOG";
@@ -39,4 +40,18 @@ pub fn flush_log() {
             let _ = writer.flush();
         }
     }
+}
+
+/// Count the number of tokens in chat messages using tiktoken.
+pub fn count_prompt_tokens(
+    model: &str,
+    messages: &[ChatCompletionRequestMessage],
+) -> Option<usize> {
+    num_tokens_from_messages(model, messages).ok()
+}
+
+/// Count tokens for plain text using tiktoken.
+pub fn count_text_tokens(model: &str, text: &str) -> Option<usize> {
+    let bpe = get_bpe_from_model(model).ok()?;
+    Some(bpe.encode_with_special_tokens(text).len())
 }

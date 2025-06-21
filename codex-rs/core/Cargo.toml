@@ -52,6 +52,7 @@ tree-sitter = "0.25.3"
 tree-sitter-bash = "0.23.3"
 uuid = { version = "1", features = ["serde", "v4"] }
 wildmatch = "2.4.0"
+tiktoken-rs = "0.7"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 landlock = "0.4.1"
@@ -72,3 +73,4 @@ predicates = "3"
 pretty_assertions = "1.4.1"
 tempfile = "3"
 wiremock = "0.6"
+serial_test = "3"
