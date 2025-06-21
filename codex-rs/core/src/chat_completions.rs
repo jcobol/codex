@@ -141,7 +141,7 @@ pub(crate) async fn stream_chat_completions(
             Ok(resp) if resp.status().is_success() => {
                 let (tx_event, rx_event) = mpsc::channel::<Result<ResponseEvent>>(16);
                 let stream = resp.bytes_stream().map_err(CodexErr::Reqwest);
-                tokio::spawn(process_chat_sse(stream, tx_event));
+                tokio::spawn(process_chat_sse(stream, tx_event, model.to_string()));
                 return Ok(ResponseStream { rx_event });
             }
             Ok(res) => {
@@ -180,7 +180,11 @@ pub(crate) async fn stream_chat_completions(
 /// Lightweight SSE processor for the Chat Completions streaming format. The
 /// output is mapped onto Codex's internal [`ResponseEvent`] so that the rest
 /// of the pipeline can stay agnostic of the underlying wire format.
-async fn process_chat_sse<S>(stream: S, tx_event: mpsc::Sender<Result<ResponseEvent>>)
+async fn process_chat_sse<S>(
+    stream: S,
+    tx_event: mpsc::Sender<Result<ResponseEvent>>,
+    model: String,
+)
 where
     S: Stream<Item = Result<Bytes>> + Unpin,
 {
@@ -243,6 +247,15 @@ where
             Err(_) => continue,
         };
         trace!("chat_completions received SSE chunk: {chunk:?}");
+
+        if let Some(usage) = chunk.get("usage") {
+            if let (Some(p), Some(c)) = (
+                usage.get("prompt_tokens").and_then(|v| v.as_u64()),
+                usage.get("completion_tokens").and_then(|v| v.as_u64()),
+            ) {
+                crate::token_metering::record_usage(&model, p, c);
+            }
+        }
 
         let choice_opt = chunk.get("choices").and_then(|c| c.get(0));
 
