@@ -361,3 +361,40 @@ test("loads and saves custom shell config", () => {
   expect(reloadedConfig.tools?.shell?.maxBytes).toBe(updatedMaxBytes);
   expect(reloadedConfig.tools?.shell?.maxLines).toBe(updatedMaxLines);
 });
+
+test("loads and saves max_context_length", () => {
+  const initialMax = 12345;
+
+  memfs[testConfigPath] = JSON.stringify(
+    {
+      model: "mymodel",
+      max_context_length: initialMax,
+    },
+    null,
+    2,
+  );
+  memfs[testInstructionsPath] = "test instructions";
+
+  const loaded = loadConfig(testConfigPath, testInstructionsPath, {
+    disableProjectDoc: true,
+  });
+
+  expect(loaded.maxContextLength).toBe(initialMax);
+
+  const updatedMax = 54321;
+  saveConfig(
+    { ...loaded, maxContextLength: updatedMax },
+    testConfigPath,
+    testInstructionsPath,
+  );
+
+  expect(memfs[testConfigPath]).toContain(
+    `"max_context_length": ${updatedMax}`,
+  );
+
+  const reloaded = loadConfig(testConfigPath, testInstructionsPath, {
+    disableProjectDoc: true,
+  });
+
+  expect(reloaded.maxContextLength).toBe(updatedMax);
+});

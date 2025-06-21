@@ -1,7 +1,7 @@
 import type { ResponseItem } from "openai/resources/responses/responses.mjs";
 
 import { approximateTokensUsed } from "./approximate-tokens-used.js";
-import { getApiKey } from "./config.js";
+import { getApiKey, loadConfig } from "./config.js";
 import { type SupportedModelId, openAiModelInfo } from "./model-info.js";
 import { createOpenAIClient } from "./openai-client.js";
 
@@ -88,6 +88,10 @@ export async function isModelSupportedForResponses(
 
 /** Returns the maximum context length (in tokens) for a given model. */
 export function maxTokensForModel(model: string): number {
+  const override = loadConfig().maxContextLength;
+  if (typeof override === "number" && override > 0) {
+    return override;
+  }
   if (model in openAiModelInfo) {
     return openAiModelInfo[model as SupportedModelId].maxContextLength;
   }
