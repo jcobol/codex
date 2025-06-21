@@ -2,7 +2,6 @@
 
 build:
 	cargo build --manifest-path codex-rs/Cargo.toml
-	pnpm --filter @openai/codex run build
-
-run: build
-	node codex-cli/bin/codex.js
+	corepack enable
+	pnpm install
+	cd codex-cli && pnpm build && pnpm install && pnpm link

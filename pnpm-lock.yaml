@@ -8,6 +8,7 @@ overrides:
   braces: ^3.0.3
   micromatch: ^4.0.8
   semver: ^7.7.1
+  '@openai/codex': link:codex-cli
 
 patchedDependencies:
   marked-terminal@7.3.0:
@@ -17,6 +18,10 @@ patchedDependencies:
 importers:
 
   .:
+    dependencies:
+      '@openai/codex':
+        specifier: link:codex-cli
+        version: link:codex-cli
     devDependencies:
       git-cliff:
         specifier: ^2.8.0
