@@ -112,6 +112,7 @@ pub(crate) async fn stream_chat_completions(
         "messages": messages,
         "stream": true,
         "tools": tools_json,
+        "stream_options": {"include_usage": true},
     });
 
     let base_url = provider.base_url.trim_end_matches('/');
@@ -184,8 +185,7 @@ async fn process_chat_sse<S>(
     stream: S,
     tx_event: mpsc::Sender<Result<ResponseEvent>>,
     model: String,
-)
-where
+) where
     S: Stream<Item = Result<Bytes>> + Unpin,
 {
     let mut stream = stream.eventsource();

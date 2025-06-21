@@ -264,7 +264,8 @@ DEBUG=true codex
 ## Token usage metering
 
 Set `CODEX_TOKEN_LOG` to a CSV file path to log prompt and completion tokens for
-each chat completion request:
+each chat completion request. The OpenAI provider must support usage metrics.
+This is enabled by passing `stream_options.include_usage=true` when streaming:
 
 ```bash
 export CODEX_TOKEN_LOG=~/token_usage.csv

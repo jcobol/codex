@@ -4,16 +4,16 @@ use std::time::Duration;
 use codex_core::Codex;
 use codex_core::ModelProviderInfo;
 use codex_core::WireApi;
-use codex_core::protocol::{InputItem, Op, EventMsg};
 use codex_core::exec::CODEX_SANDBOX_NETWORK_DISABLED_ENV_VAR;
+use codex_core::protocol::{EventMsg, InputItem, Op};
 use tempfile::TempDir;
 use tokio::time::timeout;
-use wiremock::{Mock, MockServer, ResponseTemplate};
 use wiremock::matchers::{method, path};
+use wiremock::{Mock, MockServer, ResponseTemplate};
 mod test_support;
-use test_support::load_default_config_for_test;
 use codex_core::token_metering::TOKEN_LOG_ENV_VAR;
 use codex_core::token_metering::flush_log;
+use test_support::load_default_config_for_test;
 
 fn sse_with_usage() -> String {
     "data: {\"choices\":[{\"delta\":{\"content\":\"hi\"},\"index\":0}]}\n\n".to_string()
@@ -84,4 +84,3 @@ async fn logs_token_usage() {
     let contents = std::fs::read_to_string(log_path).unwrap();
     assert!(contents.trim().ends_with("gpt-test,10,5"));
 }
-
