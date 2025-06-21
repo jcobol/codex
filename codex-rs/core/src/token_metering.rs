@@ -3,6 +3,8 @@ use std::fs::{File, OpenOptions};
 use std::io::{BufWriter, Write};
 use std::sync::Mutex;
 
+use ctor::{ctor, dtor};
+
 /// Environment variable that enables token logging when set to a file path.
 pub const TOKEN_LOG_ENV_VAR: &str = "CODEX_TOKEN_LOG";
 
@@ -15,6 +17,11 @@ static TOKEN_LOGGER: Lazy<Option<Mutex<BufWriter<File>>>> = Lazy::new(|| {
         .ok()?;
     Some(Mutex::new(BufWriter::new(file)))
 });
+
+#[dtor]
+fn flush_on_exit() {
+    flush_log();
+}
 
 /// Append a token usage record to the CSV log if enabled.
 pub fn record_usage(model: &str, prompt_tokens: u64, completion_tokens: u64) {

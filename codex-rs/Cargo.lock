@@ -616,6 +616,7 @@ dependencies = [
  "codex-apply-patch",
  "codex-login",
  "codex-mcp-client",
+ "ctor",
  "dirs",
  "env-flags",
  "eventsource-stream",
