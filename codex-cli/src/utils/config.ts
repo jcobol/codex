@@ -170,6 +170,8 @@ export type StoredConfig = {
    * terminal output.
    */
   fileOpener?: FileOpenerScheme;
+  /** Override the maximum context length used for all models */
+  max_context_length?: number;
 };
 
 // Minimal config written on first run.  An *empty* model string ensures that
@@ -215,6 +217,8 @@ export type AppConfig = {
     };
   };
   fileOpener?: FileOpenerScheme;
+  /** Optional override for the maximum context length */
+  maxContextLength?: number;
 };
 
 // Formatting (quiet mode-only).
@@ -439,6 +443,7 @@ export const loadConfig = (
     disableResponseStorage: storedConfig.disableResponseStorage === true,
     reasoningEffort: storedConfig.reasoningEffort,
     fileOpener: storedConfig.fileOpener,
+    maxContextLength: storedConfig.max_context_length,
   };
 
   // -----------------------------------------------------------------------
@@ -560,6 +565,7 @@ export const saveConfig = (
     disableResponseStorage: config.disableResponseStorage,
     flexMode: config.flexMode,
     reasoningEffort: config.reasoningEffort,
+    max_context_length: config.maxContextLength,
   };
 
   // Add history settings if they exist
