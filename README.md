@@ -363,12 +363,16 @@ Codex configuration files can be placed in the `~/.codex/` directory, supporting
 
 ### Basic configuration parameters
 
-| Parameter           | Type    | Default    | Description                      | Available Options                                                                              |
-| ------------------- | ------- | ---------- | -------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `model`             | string  | `o4-mini`  | AI model to use                  | Any model name supporting OpenAI API                                                           |
-| `approvalMode`      | string  | `suggest`  | AI assistant's permission mode   | `suggest` (suggestions only)<br>`auto-edit` (automatic edits)<br>`full-auto` (fully automatic) |
-| `fullAutoErrorMode` | string  | `ask-user` | Error handling in full-auto mode | `ask-user` (prompt for user input)<br>`ignore-and-continue` (ignore and proceed)               |
-| `notify`            | boolean | `true`     | Enable desktop notifications     | `true`/`false`                                                                                 |
+| Parameter           | Type    | Default    | Description                              | Available Options                                                                              |
+| ------------------- | ------- | ---------- | ---------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `model`             | string  | `o4-mini`  | AI model to use                          | Any model name supporting OpenAI API                                                           |
+| `approvalMode`      | string  | `suggest`  | AI assistant's permission mode           | `suggest` (suggestions only)<br>`auto-edit` (automatic edits)<br>`full-auto` (fully automatic) |
+| `fullAutoErrorMode` | string  | `ask-user` | Error handling in full-auto mode         | `ask-user` (prompt for user input)<br>`ignore-and-continue` (ignore and proceed)               |
+| `notify`            | boolean | `true`     | Enable desktop notifications             | `true`/`false`                                                                                 |
+| `maxContextLength`  | number  | _none_     | Override maximum context length (tokens) |
+| Any positive number |
+
+Use `maxContextLength` if you want to override the built-in token limits for your chosen model. This is useful when working with fine-tuned models that support different context sizes.
 
 ### Custom AI provider configuration
 
@@ -420,6 +424,7 @@ Below is a comprehensive example of `config.json` with multiple custom providers
 {
   "model": "o4-mini",
   "provider": "openai",
+  "max_context_length": 16000,
   "providers": {
     "openai": {
       "name": "OpenAI",
