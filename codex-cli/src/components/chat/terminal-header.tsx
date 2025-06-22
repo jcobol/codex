@@ -10,6 +10,8 @@ export interface TerminalHeaderProps {
   PWD: string;
   model: string;
   provider?: string;
+  /** Optional override for the maximum context length */
+  maxContextLength?: number;
   approvalPolicy: string;
   colorsByPolicy: Record<string, string | undefined>;
   agent?: AgentLoop;
@@ -24,6 +26,7 @@ const TerminalHeader: React.FC<TerminalHeaderProps> = ({
   model,
   provider = "openai",
   approvalPolicy,
+  maxContextLength,
   colorsByPolicy,
   agent,
   initialImagePaths,
@@ -34,8 +37,9 @@ const TerminalHeader: React.FC<TerminalHeaderProps> = ({
       {terminalRows < 10 ? (
         // Compact header for small terminal windows
         <Text>
-          ● Codex v{version} - {PWD} - {model} ({provider}) -{" "}
-          <Text color={colorsByPolicy[approvalPolicy]}>{approvalPolicy}</Text>
+          ● Codex v{version} - {PWD} - {model} ({provider})
+          {typeof maxContextLength === "number" ? ` [ctx ${maxContextLength}]` : ""}
+          - <Text color={colorsByPolicy[approvalPolicy]}>{approvalPolicy}</Text>
           {flexModeEnabled ? " - flex-mode" : ""}
         </Text>
       ) : (
@@ -71,6 +75,12 @@ const TerminalHeader: React.FC<TerminalHeaderProps> = ({
               <Text color="blueBright">↳</Text> provider:{" "}
               <Text bold>{provider}</Text>
             </Text>
+            {typeof maxContextLength === "number" && (
+              <Text dimColor>
+                <Text color="blueBright">↳</Text> context:{" "}
+                <Text bold>{maxContextLength}</Text>
+              </Text>
+            )}
             <Text dimColor>
               <Text color="blueBright">↳</Text> approval:{" "}
               <Text bold color={colorsByPolicy[approvalPolicy]}>

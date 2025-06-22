@@ -308,14 +308,13 @@ Below are a few bite-size examples you can copy-paste. Replace the text in quote
 
 ---
 
-## Installation
-
-<details open>
-<summary><strong>From npm (Recommended)</strong></summary>
-
-```bash
-npm install -g @openai/codex
-# or
+| Parameter           | Type    | Default    | Description | Available Options |
+| ------------------- | ------- | ---------- | ----------- | ----------------- |
+| `model`             | string  | `o4-mini`  | AI model to use | Any model name supporting OpenAI API |
+| `approvalMode`      | string  | `suggest`  | AI assistant's permission mode | `suggest` (suggestions only)<br>`auto-edit` (automatic edits)<br>`full-auto` (fully automatic) |
+| `fullAutoErrorMode` | string  | `ask-user` | Error handling in full-auto mode | `ask-user` (prompt for user input)<br>`ignore-and-continue` (ignore and proceed) |
+| `notify`            | boolean | `true`     | Enable desktop notifications | `true`/`false` |
+| `maxContextLength`  | number  | _none_     | Override maximum context length (tokens) | Any positive number |
 yarn global add @openai/codex
 # or
 bun install -g @openai/codex

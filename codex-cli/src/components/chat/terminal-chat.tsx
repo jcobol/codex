@@ -490,6 +490,7 @@ export default function TerminalChat({
               PWD,
               model,
               provider,
+              maxContextLength: config.maxContextLength,
               approvalPolicy,
               colorsByPolicy,
               agent,
