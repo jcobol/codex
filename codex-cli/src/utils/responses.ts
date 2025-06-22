@@ -1,4 +1,9 @@
 import type { OpenAI } from "openai";
+import {
+  recordTokenUsage,
+  countPromptTokens,
+  countTextTokens,
+} from "./token-metering.js";
 import type {
   ResponseCreateParams,
   Response,
@@ -283,6 +288,7 @@ const createCompletion = (openai: OpenAI, input: ResponseCreateInput) => {
     stream: input.stream || false,
     user: input.user,
     metadata: input.metadata,
+    stream_options: { include_usage: true },
   };
 
   // Older mocks or alternate SDKs used by the tests may not expose the
@@ -336,6 +342,8 @@ async function nonStreamResponses(
   completion: OpenAI.Chat.Completions.ChatCompletion,
 ): Promise<ResponseOutput> {
   const fullMessages = getFullMessages(input);
+  const promptTokensEst = countPromptTokens(fullMessages);
+  let completionTokensEst = 0;
 
   try {
     const chatResponse = completion;
@@ -365,6 +373,9 @@ async function nonStreamResponses(
             name: toolCall.function.name,
             arguments: toolCall.function.arguments,
           });
+          completionTokensEst +=
+            countTextTokens(toolCall.function.name) +
+            countTextTokens(toolCall.function.arguments);
         }
       }
     }
@@ -375,6 +386,7 @@ async function nonStreamResponses(
         text: assistantMessage.content,
         annotations: [],
       });
+      completionTokensEst += countTextTokens(assistantMessage.content);
     }
 
     // Create response with appropriate status and properties
@@ -450,6 +462,20 @@ async function nonStreamResponses(
       messages: newHistory,
     });
 
+    const usage = responseOutput.usage;
+    if (
+      usage?.input_tokens !== undefined &&
+      usage?.output_tokens !== undefined
+    ) {
+      recordTokenUsage(
+        chatResponse.model,
+        usage.input_tokens,
+        usage.output_tokens,
+      );
+    } else {
+      recordTokenUsage(chatResponse.model, promptTokensEst, completionTokensEst);
+    }
+
     return responseOutput;
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -463,6 +489,8 @@ async function* streamResponses(
   completion: AsyncIterable<OpenAI.ChatCompletionChunk>,
 ): AsyncGenerator<ResponseEvent> {
   const fullMessages = getFullMessages(input);
+  const promptTokensEst = countPromptTokens(fullMessages);
+  let completionTokensEst = 0;
 
   const responseId = generateId("resp");
   const outputItemId = generateId("msg");
@@ -543,15 +571,16 @@ async function* streamResponses(
               status: "in_progress",
               call_id: toolCallId,
               name: functionName,
-              arguments: "",
-            },
-            output_index: 0,
-          };
-          toolCalls.set(tcIndex, {
-            id: toolCallId,
-            name: functionName,
             arguments: "",
-          });
+          },
+          output_index: 0,
+        };
+        completionTokensEst += countTextTokens(functionName);
+        toolCalls.set(tcIndex, {
+          id: toolCallId,
+          name: functionName,
+          arguments: "",
+        });
         }
 
         if (tcDelta.function?.arguments) {
@@ -565,6 +594,7 @@ async function* streamResponses(
               content_index,
               delta: tcDelta.function.arguments,
             };
+            completionTokensEst += countTextTokens(tcDelta.function.arguments);
           }
         }
       }
@@ -616,6 +646,7 @@ async function* streamResponses(
           delta: choice.delta.content,
         };
         textContent += choice.delta.content;
+        completionTokensEst += countTextTokens(choice.delta.content);
       }
       if (choice.finish_reason) {
         yield {
@@ -721,6 +752,23 @@ async function* streamResponses(
     });
 
     yield { type: "response.completed", response: finalResponse };
+    const usageData = finalResponse.usage;
+    if (
+      usageData?.input_tokens !== undefined &&
+      usageData?.output_tokens !== undefined
+    ) {
+      recordTokenUsage(
+        finalResponse.model,
+        usageData.input_tokens,
+        usageData.output_tokens,
+      );
+    } else {
+      recordTokenUsage(
+        finalResponse.model,
+        promptTokensEst,
+        completionTokensEst,
+      );
+    }
   }
 }
 

@@ -22,6 +22,7 @@
 - [Memory & project docs](#memory--project-docs)
 - [Non-interactive / CI mode](#non-interactive--ci-mode)
 - [Tracing / verbose logging](#tracing--verbose-logging)
+- [Token usage metering](#token-usage-metering)
 - [Recipes](#recipes)
 - [Installation](#installation)
 - [Configuration guide](#configuration-guide)
@@ -259,6 +260,25 @@ Setting the environment variable `DEBUG=true` prints full API request and respon
 ```shell
 DEBUG=true codex
 ```
+
+## Token usage metering
+
+Set `CODEX_TOKEN_LOG` to a CSV file path to log prompt and completion tokens for
+each chat completion request. The OpenAI provider must support usage metrics.
+This is enabled by passing `stream_options.include_usage=true` when streaming:
+
+```bash
+export CODEX_TOKEN_LOG=~/token_usage.csv
+codex "refactor my app"
+```
+
+Generate an HTML report of the largest prompts:
+
+```bash
+python scripts/context_diff_report.py ~/token_usage.csv report.html
+```
+
+Open `report.html` in a browser to view the chart.
 
 ---
 
