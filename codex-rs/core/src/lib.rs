@@ -8,8 +8,9 @@
 mod chat_completions;
 mod client;
 mod client_common;
-pub mod token_metering;
 pub mod codex;
+pub mod io_logging;
+pub mod token_metering;
 pub use codex::Codex;
 pub mod codex_wrapper;
 pub mod config;

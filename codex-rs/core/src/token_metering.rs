@@ -4,7 +4,7 @@ use std::io::{BufWriter, Write};
 use std::sync::Mutex;
 
 use ctor::dtor;
-use tiktoken_rs::{get_bpe_from_model, num_tokens_from_messages, ChatCompletionRequestMessage};
+use tiktoken_rs::{ChatCompletionRequestMessage, get_bpe_from_model, num_tokens_from_messages};
 
 /// Environment variable that enables token logging when set to a file path.
 pub const TOKEN_LOG_ENV_VAR: &str = "CODEX_TOKEN_LOG";
