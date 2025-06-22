@@ -54,7 +54,8 @@ pub(crate) async fn stream_chat_completions(
                 let mut text = String::new();
                 for c in content {
                     match c {
-                        ContentItem::InputText { text: t } | ContentItem::OutputText { text: t } => {
+                        ContentItem::InputText { text: t }
+                        | ContentItem::OutputText { text: t } => {
                             text.push_str(t);
                         }
                         _ => {}
@@ -149,6 +150,9 @@ pub(crate) async fn stream_chat_completions(
         "stream_options": {"include_usage": true},
     });
 
+    // Log the full payload if I/O logging is enabled.
+    crate::io_logging::log_input(&serde_json::to_string(&payload).unwrap_or_default());
+
     let base_url = provider.base_url.trim_end_matches('/');
     let url = format!("{}/chat/completions", base_url);
 
@@ -176,7 +180,12 @@ pub(crate) async fn stream_chat_completions(
             Ok(resp) if resp.status().is_success() => {
                 let (tx_event, rx_event) = mpsc::channel::<Result<ResponseEvent>>(16);
                 let stream = resp.bytes_stream().map_err(CodexErr::Reqwest);
-                tokio::spawn(process_chat_sse(stream, tx_event, model.to_string(), prompt_tokens_est));
+                tokio::spawn(process_chat_sse(
+                    stream,
+                    tx_event,
+                    model.to_string(),
+                    prompt_tokens_est,
+                ));
                 return Ok(ResponseStream { rx_event });
             }
             Ok(res) => {
@@ -251,7 +260,11 @@ async fn process_chat_sse<S>(
                 let _ = tx_event.send(Err(CodexErr::Stream(e.to_string()))).await;
                 if !usage_recorded {
                     if let Some(p) = prompt_tokens_est {
-                        crate::token_metering::record_usage(&model, p as u64, completion_tokens_est as u64);
+                        crate::token_metering::record_usage(
+                            &model,
+                            p as u64,
+                            completion_tokens_est as u64,
+                        );
                     }
                 }
                 return;
@@ -265,7 +278,11 @@ async fn process_chat_sse<S>(
                     .await;
                 if !usage_recorded {
                     if let Some(p) = prompt_tokens_est {
-                        crate::token_metering::record_usage(&model, p as u64, completion_tokens_est as u64);
+                        crate::token_metering::record_usage(
+                            &model,
+                            p as u64,
+                            completion_tokens_est as u64,
+                        );
                     }
                 }
                 return;
@@ -276,12 +293,18 @@ async fn process_chat_sse<S>(
                     .await;
                 if !usage_recorded {
                     if let Some(p) = prompt_tokens_est {
-                        crate::token_metering::record_usage(&model, p as u64, completion_tokens_est as u64);
+                        crate::token_metering::record_usage(
+                            &model,
+                            p as u64,
+                            completion_tokens_est as u64,
+                        );
                     }
                 }
                 return;
             }
         };
+
+        crate::io_logging::log_output(&sse.data);
 
         // OpenAI Chat streaming sends a literal string "[DONE]" when finished.
         if sse.data.trim() == "[DONE]" {
@@ -292,7 +315,11 @@ async fn process_chat_sse<S>(
                 .await;
             if !usage_recorded {
                 if let Some(p) = prompt_tokens_est {
-                    crate::token_metering::record_usage(&model, p as u64, completion_tokens_est as u64);
+                    crate::token_metering::record_usage(
+                        &model,
+                        p as u64,
+                        completion_tokens_est as u64,
+                    );
                 }
             }
             return;
@@ -396,7 +423,11 @@ async fn process_chat_sse<S>(
 
                 if !usage_recorded {
                     if let Some(p) = prompt_tokens_est {
-                        crate::token_metering::record_usage(&model, p as u64, completion_tokens_est as u64);
+                        crate::token_metering::record_usage(
+                            &model,
+                            p as u64,
+                            completion_tokens_est as u64,
+                        );
                     }
                 }
 

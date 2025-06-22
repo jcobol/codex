@@ -1,4 +1,5 @@
 import type { OpenAI } from "openai";
+import { logInput, logOutput } from "./io-log.js";
 import {
   recordTokenUsage,
   countPromptTokens,
@@ -290,6 +291,7 @@ const createCompletion = (openai: OpenAI, input: ResponseCreateInput) => {
     metadata: input.metadata,
     stream_options: { include_usage: true },
   };
+  logInput(chatInput);
 
   // Older mocks or alternate SDKs used by the tests may not expose the
   // `chat` API surface.  Fall back to the `responses` endpoint when the
@@ -354,6 +356,7 @@ async function nonStreamResponses(
     if (!assistantMessage) {
       throw new Error("No assistant message in chat completion response");
     }
+    logOutput(assistantMessage);
 
     // Construct ResponseOutput
     const responseId = generateId("resp");
@@ -473,7 +476,11 @@ async function nonStreamResponses(
         usage.output_tokens,
       );
     } else {
-      recordTokenUsage(chatResponse.model, promptTokensEst, completionTokensEst);
+      recordTokenUsage(
+        chatResponse.model,
+        promptTokensEst,
+        completionTokensEst,
+      );
     }
 
     return responseOutput;
@@ -530,6 +537,7 @@ async function* streamResponses(
   let isToolCall = false;
   for await (const chunk of completion as AsyncIterable<OpenAI.ChatCompletionChunk>) {
     // console.error('\nCHUNK: ', JSON.stringify(chunk));
+    logOutput(chunk);
     const choice = chunk.choices?.[0];
     if (!choice) {
       continue;
@@ -571,16 +579,16 @@ async function* streamResponses(
               status: "in_progress",
               call_id: toolCallId,
               name: functionName,
+              arguments: "",
+            },
+            output_index: 0,
+          };
+          completionTokensEst += countTextTokens(functionName);
+          toolCalls.set(tcIndex, {
+            id: toolCallId,
+            name: functionName,
             arguments: "",
-          },
-          output_index: 0,
-        };
-        completionTokensEst += countTextTokens(functionName);
-        toolCalls.set(tcIndex, {
-          id: toolCallId,
-          name: functionName,
-          arguments: "",
-        });
+          });
         }
 
         if (tcDelta.function?.arguments) {

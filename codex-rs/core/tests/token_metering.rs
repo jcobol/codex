@@ -13,8 +13,8 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 mod test_support;
 use codex_core::token_metering::TOKEN_LOG_ENV_VAR;
 use codex_core::token_metering::flush_log;
-use test_support::load_default_config_for_test;
 use serial_test::serial;
+use test_support::load_default_config_for_test;
 
 fn sse_with_usage() -> String {
     "data: {\"choices\":[{\"delta\":{\"content\":\"hi\"},\"index\":0}]}\n\n".to_string()
@@ -137,7 +137,9 @@ async fn estimates_token_usage_when_missing() {
     let (codex, _init_id) = Codex::spawn(config, ctrl_c).await.unwrap();
 
     codex
-        .submit(Op::UserInput { items: vec![InputItem::Text { text: "hi".into() }] })
+        .submit(Op::UserInput {
+            items: vec![InputItem::Text { text: "hi".into() }],
+        })
         .await
         .unwrap();
 

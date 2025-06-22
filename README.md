@@ -278,6 +278,16 @@ Generate an HTML report of the largest prompts:
 python scripts/context_diff_report.py ~/token_usage.csv report.html
 ```
 
+## Request/response logging
+
+Set `CODEX_IO_LOG` to a file path to capture the raw payloads sent to the model
+and the responses received.
+
+```bash
+export CODEX_IO_LOG=~/io.log
+codex "refactor my app"
+```
+
 Open `report.html` in a browser to view the chart.
 
 ---
