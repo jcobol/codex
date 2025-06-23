@@ -1,14 +1,12 @@
 import type { OpenAI } from "openai";
+import type { ResponseCreateParams, Response } from "openai/resources/responses/responses";
+
 import { logInput, logOutput } from "./io-log.js";
 import {
   recordTokenUsage,
   countPromptTokens,
   countTextTokens,
 } from "./token-metering.js";
-import type {
-  ResponseCreateParams,
-  Response,
-} from "openai/resources/responses/responses";
 
 // Define interfaces based on OpenAI API documentation
 type ResponseCreateInput = ResponseCreateParams;
@@ -133,24 +131,6 @@ type ResponseEvent =
   | { type: "response.completed"; response: ResponseOutput }
   | { type: "error"; code: string; message: string; param: string | null };
 
-// Define a type for tool call data
-type ToolCallData = {
-  id: string;
-  name: string;
-  arguments: string;
-};
-
-// Define a type for usage data
-type UsageData = {
-  prompt_tokens?: number;
-  completion_tokens?: number;
-  total_tokens?: number;
-  input_tokens?: number;
-  input_tokens_details?: { cached_tokens: number };
-  output_tokens?: number;
-  output_tokens_details?: { reasoning_tokens: number };
-  [key: string]: unknown;
-};
 
 // Define a type for content output
 type ResponseContentOutput =
@@ -286,7 +266,7 @@ const createCompletion = (openai: OpenAI, input: ResponseCreateInput) => {
     tool_choice: (input.tool_choice === "auto"
       ? "auto"
       : input.tool_choice) as OpenAI.Chat.Completions.ChatCompletionCreateParams["tool_choice"],
-    stream: input.stream || false,
+    stream: false,
     user: input.user,
     metadata: input.metadata,
     stream_options: { include_usage: true },
@@ -314,28 +294,13 @@ const createCompletion = (openai: OpenAI, input: ResponseCreateInput) => {
 // Main function with overloading
 async function responsesCreateViaChatCompletions(
   openai: OpenAI,
-  input: ResponseCreateInput & { stream: true },
-): Promise<AsyncGenerator<ResponseEvent>>;
-async function responsesCreateViaChatCompletions(
-  openai: OpenAI,
-  input: ResponseCreateInput & { stream?: false },
-): Promise<ResponseOutput>;
-async function responsesCreateViaChatCompletions(
-  openai: OpenAI,
   input: ResponseCreateInput,
-): Promise<ResponseOutput | AsyncGenerator<ResponseEvent>> {
+): Promise<ResponseOutput> {
   const completion = await createCompletion(openai, input);
-  if (input.stream) {
-    return streamResponses(
-      input,
-      completion as AsyncIterable<OpenAI.ChatCompletionChunk>,
-    );
-  } else {
-    return nonStreamResponses(
-      input,
-      completion as unknown as OpenAI.Chat.Completions.ChatCompletion,
-    );
-  }
+  return nonStreamResponses(
+    input,
+    completion as unknown as OpenAI.Chat.Completions.ChatCompletion,
+  );
 }
 
 // Non-streaming implementation
@@ -490,295 +455,6 @@ async function nonStreamResponses(
   }
 }
 
-// Streaming implementation
-async function* streamResponses(
-  input: ResponseCreateInput,
-  completion: AsyncIterable<OpenAI.ChatCompletionChunk>,
-): AsyncGenerator<ResponseEvent> {
-  const fullMessages = getFullMessages(input);
-  const promptTokensEst = countPromptTokens(fullMessages);
-  let completionTokensEst = 0;
-
-  const responseId = generateId("resp");
-  const outputItemId = generateId("msg");
-  let textContentAdded = false;
-  let textContent = "";
-  const toolCalls = new Map<number, ToolCallData>();
-  let usage: UsageData | null = null;
-  const finalOutputItem: Array<ResponseContentOutput> = [];
-  // Initial response
-  const initialResponse: Partial<ResponseOutput> = {
-    id: responseId,
-    object: "response" as const,
-    created_at: Math.floor(Date.now() / 1000),
-    status: "in_progress" as const,
-    model: input.model,
-    output: [],
-    error: null,
-    incomplete_details: null,
-    instructions: null,
-    max_output_tokens: null,
-    parallel_tool_calls: true,
-    previous_response_id: input.previous_response_id ?? null,
-    reasoning: null,
-    temperature: input.temperature,
-    text: { format: { type: "text" } },
-    tool_choice: input.tool_choice ?? "auto",
-    tools: input.tools ?? [],
-    top_p: input.top_p,
-    truncation: input.truncation ?? "disabled",
-    usage: undefined,
-    user: input.user ?? undefined,
-    metadata: input.metadata ?? {},
-    output_text: "",
-  };
-  yield { type: "response.created", response: initialResponse };
-  yield { type: "response.in_progress", response: initialResponse };
-  let isToolCall = false;
-  for await (const chunk of completion as AsyncIterable<OpenAI.ChatCompletionChunk>) {
-    // console.error('\nCHUNK: ', JSON.stringify(chunk));
-    logOutput(chunk);
-    const choice = chunk.choices?.[0];
-    if (!choice) {
-      continue;
-    }
-    if (
-      !isToolCall &&
-      (("tool_calls" in choice.delta && choice.delta.tool_calls) ||
-        choice.finish_reason === "tool_calls")
-    ) {
-      isToolCall = true;
-    }
-
-    if (chunk.usage) {
-      usage = {
-        prompt_tokens: chunk.usage.prompt_tokens,
-        completion_tokens: chunk.usage.completion_tokens,
-        total_tokens: chunk.usage.total_tokens,
-        input_tokens: chunk.usage.prompt_tokens,
-        input_tokens_details: { cached_tokens: 0 },
-        output_tokens: chunk.usage.completion_tokens,
-        output_tokens_details: { reasoning_tokens: 0 },
-      };
-    }
-    if (isToolCall) {
-      for (const tcDelta of choice.delta.tool_calls || []) {
-        const tcIndex = tcDelta.index;
-        const content_index = textContentAdded ? tcIndex + 1 : tcIndex;
-
-        if (!toolCalls.has(tcIndex)) {
-          // New tool call
-          const toolCallId = tcDelta.id || generateId("call");
-          const functionName = tcDelta.function?.name || "";
-
-          yield {
-            type: "response.output_item.added",
-            item: {
-              type: "function_call",
-              id: outputItemId,
-              status: "in_progress",
-              call_id: toolCallId,
-              name: functionName,
-              arguments: "",
-            },
-            output_index: 0,
-          };
-          completionTokensEst += countTextTokens(functionName);
-          toolCalls.set(tcIndex, {
-            id: toolCallId,
-            name: functionName,
-            arguments: "",
-          });
-        }
-
-        if (tcDelta.function?.arguments) {
-          const current = toolCalls.get(tcIndex);
-          if (current) {
-            current.arguments += tcDelta.function.arguments;
-            yield {
-              type: "response.function_call_arguments.delta",
-              item_id: outputItemId,
-              output_index: 0,
-              content_index,
-              delta: tcDelta.function.arguments,
-            };
-            completionTokensEst += countTextTokens(tcDelta.function.arguments);
-          }
-        }
-      }
-
-      if (choice.finish_reason === "tool_calls") {
-        for (const [tcIndex, tc] of toolCalls) {
-          const item = {
-            type: "function_call",
-            id: outputItemId,
-            status: "completed",
-            call_id: tc.id,
-            name: tc.name,
-            arguments: tc.arguments,
-          };
-          yield {
-            type: "response.function_call_arguments.done",
-            item_id: outputItemId,
-            output_index: tcIndex,
-            content_index: textContentAdded ? tcIndex + 1 : tcIndex,
-            arguments: tc.arguments,
-          };
-          yield {
-            type: "response.output_item.done",
-            output_index: tcIndex,
-            item,
-          };
-          finalOutputItem.push(item as unknown as ResponseContentOutput);
-        }
-      } else {
-        continue;
-      }
-    } else {
-      if (!textContentAdded) {
-        yield {
-          type: "response.content_part.added",
-          item_id: outputItemId,
-          output_index: 0,
-          content_index: 0,
-          part: { type: "output_text", text: "", annotations: [] },
-        };
-        textContentAdded = true;
-      }
-      if (choice.delta.content?.length) {
-        yield {
-          type: "response.output_text.delta",
-          item_id: outputItemId,
-          output_index: 0,
-          content_index: 0,
-          delta: choice.delta.content,
-        };
-        textContent += choice.delta.content;
-        completionTokensEst += countTextTokens(choice.delta.content);
-      }
-      if (choice.finish_reason) {
-        yield {
-          type: "response.output_text.done",
-          item_id: outputItemId,
-          output_index: 0,
-          content_index: 0,
-          text: textContent,
-        };
-        yield {
-          type: "response.content_part.done",
-          item_id: outputItemId,
-          output_index: 0,
-          content_index: 0,
-          part: { type: "output_text", text: textContent, annotations: [] },
-        };
-        const item = {
-          type: "message",
-          id: outputItemId,
-          status: "completed",
-          role: "assistant",
-          content: [
-            { type: "output_text", text: textContent, annotations: [] },
-          ],
-        };
-        yield {
-          type: "response.output_item.done",
-          output_index: 0,
-          item,
-        };
-        finalOutputItem.push(item as unknown as ResponseContentOutput);
-      } else {
-        continue;
-      }
-    }
-
-    // Construct final response
-    const finalResponse: ResponseOutput = {
-      id: responseId,
-      object: "response" as const,
-      created_at: initialResponse.created_at || Math.floor(Date.now() / 1000),
-      status: "completed" as const,
-      error: null,
-      incomplete_details: null,
-      instructions: null,
-      max_output_tokens: null,
-      model: chunk.model || input.model,
-      output: finalOutputItem as unknown as ResponseOutput["output"],
-      parallel_tool_calls: true,
-      previous_response_id: input.previous_response_id ?? null,
-      reasoning: null,
-      temperature: input.temperature,
-      text: { format: { type: "text" } },
-      tool_choice: input.tool_choice ?? "auto",
-      tools: input.tools ?? [],
-      top_p: input.top_p,
-      truncation: input.truncation ?? "disabled",
-      usage: usage as ResponseOutput["usage"],
-      user: input.user ?? undefined,
-      metadata: input.metadata ?? {},
-      output_text: "",
-    } as ResponseOutput;
-
-    // Store history
-    const assistantMessage: OpenAI.Chat.Completions.ChatCompletionMessageParam =
-      {
-        role: "assistant" as const,
-      };
-
-    if (textContent) {
-      assistantMessage.content = textContent;
-    }
-
-    // Add tool_calls property if needed
-    if (toolCalls.size > 0) {
-      const toolCallsArray = Array.from(toolCalls.values()).map((tc) => ({
-        id: tc.id,
-        type: "function" as const,
-        function: { name: tc.name, arguments: tc.arguments },
-      }));
-
-      // Define a more specific type for the assistant message with tool calls
-      type AssistantMessageWithToolCalls =
-        OpenAI.Chat.Completions.ChatCompletionMessageParam & {
-          tool_calls: Array<{
-            id: string;
-            type: "function";
-            function: {
-              name: string;
-              arguments: string;
-            };
-          }>;
-        };
-
-      // Use type assertion with the defined type
-      (assistantMessage as AssistantMessageWithToolCalls).tool_calls =
-        toolCallsArray;
-    }
-    const newHistory = [...fullMessages, assistantMessage];
-    conversationHistories.set(responseId, {
-      previous_response_id: input.previous_response_id ?? null,
-      messages: newHistory,
-    });
-
-    yield { type: "response.completed", response: finalResponse };
-    const usageData = finalResponse.usage;
-    if (
-      usageData?.input_tokens !== undefined &&
-      usageData?.output_tokens !== undefined
-    ) {
-      recordTokenUsage(
-        finalResponse.model,
-        usageData.input_tokens,
-        usageData.output_tokens,
-      );
-    } else {
-      recordTokenUsage(
-        finalResponse.model,
-        promptTokensEst,
-        completionTokensEst,
-      );
-    }
-  }
-}
 
 export {
   responsesCreateViaChatCompletions,

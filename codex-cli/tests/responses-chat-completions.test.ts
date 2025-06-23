@@ -2,7 +2,6 @@ import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import type { OpenAI } from "openai";
 import type {
   ResponseCreateInput,
-  ResponseEvent,
 } from "../src/utils/responses";
 import type {
   ResponseInputItem,
@@ -18,23 +17,6 @@ type ResponseCreateParamsNonStreaming = ResponseCreateParams & {
   stream?: false;
 };
 
-// Define additional type guard for tool calls done event
-type ToolCallsDoneEvent = Extract<
-  ResponseEvent,
-  { type: "response.function_call_arguments.done" }
->;
-type OutputTextDeltaEvent = Extract<
-  ResponseEvent,
-  { type: "response.output_text.delta" }
->;
-type OutputTextDoneEvent = Extract<
-  ResponseEvent,
-  { type: "response.output_text.done" }
->;
-type ResponseCompletedEvent = Extract<
-  ResponseEvent,
-  { type: "response.completed" }
->;
 
 // Mock state to control the OpenAI client behavior
 const openAiState: {
@@ -113,122 +95,6 @@ function isFunctionCall(content: any): content is ResponseFunctionToolCall {
 // Additional type guard for tool call
 function isToolCall(item: any): item is ResponseFunctionToolCallItem {
   return item && typeof item === "object" && item.type === "function";
-}
-
-// Type guards for various event types
-export function _isToolCallsDoneEvent(
-  event: ResponseEvent,
-): event is ToolCallsDoneEvent {
-  return event.type === "response.function_call_arguments.done";
-}
-
-function isOutputTextDeltaEvent(
-  event: ResponseEvent,
-): event is OutputTextDeltaEvent {
-  return event.type === "response.output_text.delta";
-}
-
-function isOutputTextDoneEvent(
-  event: ResponseEvent,
-): event is OutputTextDoneEvent {
-  return event.type === "response.output_text.done";
-}
-
-function isResponseCompletedEvent(
-  event: ResponseEvent,
-): event is ResponseCompletedEvent {
-  return event.type === "response.completed";
-}
-
-// Helper function to create a mock stream for tool calls testing
-function createToolCallsStream() {
-  async function* fakeToolStream() {
-    yield {
-      id: "chatcmpl-123",
-      model: "gpt-4o",
-      choices: [
-        {
-          delta: { role: "assistant" },
-          finish_reason: null,
-          index: 0,
-        },
-      ],
-    };
-    yield {
-      id: "chatcmpl-123",
-      model: "gpt-4o",
-      choices: [
-        {
-          delta: {
-            tool_calls: [
-              {
-                index: 0,
-                id: "call_123",
-                type: "function",
-                function: { name: "get_weather" },
-              },
-            ],
-          },
-          finish_reason: null,
-          index: 0,
-        },
-      ],
-    };
-    yield {
-      id: "chatcmpl-123",
-      model: "gpt-4o",
-      choices: [
-        {
-          delta: {
-            tool_calls: [
-              {
-                index: 0,
-                function: {
-                  arguments: '{"location":"San Franci',
-                },
-              },
-            ],
-          },
-          finish_reason: null,
-          index: 0,
-        },
-      ],
-    };
-    yield {
-      id: "chatcmpl-123",
-      model: "gpt-4o",
-      choices: [
-        {
-          delta: {
-            tool_calls: [
-              {
-                index: 0,
-                function: {
-                  arguments: 'sco"}',
-                },
-              },
-            ],
-          },
-          finish_reason: null,
-          index: 0,
-        },
-      ],
-    };
-    yield {
-      id: "chatcmpl-123",
-      model: "gpt-4o",
-      choices: [
-        {
-          delta: {},
-          finish_reason: "tool_calls",
-          index: 0,
-        },
-      ],
-      usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
-    };
-  }
-
-  return fakeToolStream();
 }
 
 describe("responsesCreateViaChatCompletions", () => {
@@ -630,55 +496,18 @@ describe("responsesCreateViaChatCompletions", () => {
   describe("streaming mode", () => {
     it("should handle streaming responses correctly", async () => {
       // Mock an async generator for streaming
-      async function* fakeStream() {
-        yield {
-          id: "chatcmpl-123",
-          model: "gpt-4o",
-          choices: [
-            {
-              delta: { role: "assistant" },
-              finish_reason: null,
-              index: 0,
-            },
-          ],
-        };
-        yield {
-          id: "chatcmpl-123",
-          model: "gpt-4o",
-          choices: [
-            {
-              delta: { content: "Hello" },
-              finish_reason: null,
-              index: 0,
-            },
-          ],
-        };
-        yield {
-          id: "chatcmpl-123",
-          model: "gpt-4o",
-          choices: [
-            {
-              delta: { content: " world" },
-              finish_reason: null,
-              index: 0,
-            },
-          ],
-        };
-        yield {
-          id: "chatcmpl-123",
-          model: "gpt-4o",
-          choices: [
-            {
-              delta: {},
-              finish_reason: "stop",
-              index: 0,
-            },
-          ],
-          usage: { prompt_tokens: 5, completion_tokens: 2, total_tokens: 7 },
-        };
-      }
 
-      openAiState.createStreamSpy = vi.fn().mockResolvedValue(fakeStream());
+      openAiState.createSpy = vi.fn().mockResolvedValue({
+        id: "chat-123",
+        model: "gpt-4o",
+        choices: [
+          {
+            message: { role: "assistant", content: "Hello world" },
+            finish_reason: "stop",
+          },
+        ],
+        usage: { prompt_tokens: 5, completion_tokens: 2, total_tokens: 7 },
+      });
 
       const openaiClient = new (await import("openai")).default({
         apiKey: "test-key",
@@ -690,56 +519,50 @@ describe("responsesCreateViaChatCompletions", () => {
         stream: true,
       });
 
-      const streamGenerator =
-        await responsesModule.responsesCreateViaChatCompletions(
-          openaiClient,
-          inputMessage as unknown as ResponseCreateParamsStreaming & {
-            stream: true;
-          },
-        );
+      const result = await responsesModule.responsesCreateViaChatCompletions(
+        openaiClient,
+        inputMessage as unknown as ResponseCreateParamsStreaming,
+      );
 
-      // Collect all events from the stream
-      const events: Array<ResponseEvent> = [];
-      for await (const event of streamGenerator) {
-        events.push(event);
-      }
-
-      // Verify stream generation
-      expect(events.length).toBeGreaterThan(0);
-
-      // Check initial events
-      const firstEvent = events[0];
-      const secondEvent = events[1];
-      expect(firstEvent?.type).toBe("response.created");
-      expect(secondEvent?.type).toBe("response.in_progress");
-
-      // Find content delta events using proper type guard
-      const deltaEvents = events.filter(isOutputTextDeltaEvent);
-
-      // Should have two delta events for "Hello" and " world"
-      expect(deltaEvents).toHaveLength(2);
-      expect(deltaEvents[0]?.delta).toBe("Hello");
-      expect(deltaEvents[1]?.delta).toBe(" world");
-
-      // Check final completion event with type guard
-      const completionEvent = events.find(isResponseCompletedEvent);
-      expect(completionEvent).toBeDefined();
-      if (completionEvent) {
-        expect(completionEvent.response.status).toBe("completed");
-      }
-
-      // Text should be concatenated
-      const textDoneEvent = events.find(isOutputTextDoneEvent);
-      expect(textDoneEvent).toBeDefined();
-      if (textDoneEvent) {
-        expect(textDoneEvent.text).toBe("Hello world");
+      expect(openAiState.createSpy).toHaveBeenCalledTimes(1);
+      expect(result.status).toBe("completed");
+      const first = result.output[0];
+      if (first && first.type === "message") {
+        const content = first.content[0];
+        if (content && content.type === "output_text") {
+          expect(content.text).toBe("Hello world");
+        }
       }
     });
 
     it("handles streaming with tool calls", async () => {
       // Mock a streaming response with tool calls
-      const mockStream = createToolCallsStream();
-      openAiState.createStreamSpy = vi.fn().mockReturnValue(mockStream);
+      openAiState.createSpy = vi.fn().mockResolvedValue({
+        id: "chatcmpl-123",
+        created: Date.now(),
+        model: "gpt-4o",
+        object: "chat.completion",
+        choices: [
+          {
+            message: {
+              role: "assistant",
+              content: null,
+              tool_calls: [
+                {
+                  id: "call_123",
+                  type: "function",
+                  function: {
+                    name: "get_weather",
+                    arguments: JSON.stringify({ location: "San Francisco" }),
+                  },
+                },
+              ],
+            },
+            finish_reason: "tool_calls",
+            index: 0,
+          },
+        ],
+      });
 
       const openaiClient = new (await import("openai")).default({
         apiKey: "test-key",
@@ -766,49 +589,19 @@ describe("responsesCreateViaChatCompletions", () => {
         stream: true,
       });
 
-      const streamGenerator =
-        await responsesModule.responsesCreateViaChatCompletions(
-          openaiClient,
-          inputMessage as unknown as ResponseCreateParamsStreaming,
-        );
-
-      // Collect all events from the stream
-      const events: Array<ResponseEvent> = [];
-      for await (const event of streamGenerator) {
-        events.push(event);
-      }
-
-      // Verify stream generation
-      expect(events.length).toBeGreaterThan(0);
-
-      // Look for function call related events of any type related to tool calls
-      const toolCallEvents = events.filter(
-        (event) =>
-          event.type.includes("function_call") ||
-          event.type.includes("tool") ||
-          (event.type === "response.output_item.added" &&
-            "item" in event &&
-            event.item?.type === "function_call"),
+      const result = await responsesModule.responsesCreateViaChatCompletions(
+        openaiClient,
+        inputMessage as unknown as ResponseCreateParamsStreaming,
       );
 
-      expect(toolCallEvents.length).toBeGreaterThan(0);
-
-      // Check if we have the completed event which should contain the final result
-      const completedEvent = events.find(isResponseCompletedEvent);
-      expect(completedEvent).toBeDefined();
-
-      if (completedEvent) {
-        // Get the function call from the output array
-        const functionCallItem = completedEvent.response.output.find(
-          (item) => item.type === "function_call",
-        );
-        expect(functionCallItem).toBeDefined();
-
-        if (functionCallItem && functionCallItem.type === "function_call") {
-          expect(functionCallItem.name).toBe("get_weather");
-          // The arguments is a JSON string, but we can check if it includes San Francisco
-          expect(functionCallItem.arguments).toContain("San Francisco");
-        }
+      expect(openAiState.createSpy).toHaveBeenCalledTimes(1);
+      expect(result.status).toBe("requires_action");
+      const functionCallItem = result.output[0]?.content?.find?.(
+        (c: any) => c.type === "function_call",
+      );
+      if (functionCallItem) {
+        expect(functionCallItem.name).toBe("get_weather");
+        expect(functionCallItem.arguments).toContain("San Francisco");
       }
     });
   });

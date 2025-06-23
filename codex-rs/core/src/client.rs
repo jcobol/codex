@@ -119,7 +119,7 @@ impl ModelClient {
             reasoning,
             previous_response_id: prompt.prev_id.clone(),
             store: prompt.store,
-            stream: true,
+            stream: false,
         };
 
         let base_url = self.provider.base_url.clone();

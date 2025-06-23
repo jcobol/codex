@@ -807,19 +807,19 @@ export class AgentLoop {
                 : (params: ResponseCreateParams) =>
                     responsesCreateViaChatCompletions(
                       this.oai,
-                      params as ResponseCreateParams & { stream: true },
+                      params,
                     );
             log(
               `instructions (length ${mergedInstructions.length}): ${mergedInstructions}`,
             );
 
             // eslint-disable-next-line no-await-in-loop
-            stream = await responseCall({
-              model: this.model,
-              instructions: mergedInstructions,
-              input: turnInput,
-              stream: true,
-              parallel_tool_calls: false,
+              stream = await responseCall({
+                model: this.model,
+                instructions: mergedInstructions,
+                input: turnInput,
+              stream: false,
+                parallel_tool_calls: false,
               reasoning,
               ...(this.config.flexMode ? { service_tier: "flex" } : {}),
               ...(this.disableResponseStorage
@@ -1193,10 +1193,7 @@ export class AgentLoop {
                   ? (params: ResponseCreateParams) =>
                       this.oai.responses.create(params)
                   : (params: ResponseCreateParams) =>
-                      responsesCreateViaChatCompletions(
-                        this.oai,
-                        params as ResponseCreateParams & { stream: true },
-                      );
+                      responsesCreateViaChatCompletions(this.oai, params);
 
               log(
                 "agentLoop.run(): responseCall(1): turnInput: " +
@@ -1207,7 +1204,7 @@ export class AgentLoop {
                 model: this.model,
                 instructions: mergedInstructions,
                 input: turnInput,
-                stream: true,
+                stream: false,
                 parallel_tool_calls: false,
                 reasoning,
                 ...(this.config.flexMode ? { service_tier: "flex" } : {}),

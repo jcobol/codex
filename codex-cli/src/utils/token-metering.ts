@@ -1,7 +1,8 @@
 export const TOKEN_LOG_ENV_VAR = "CODEX_TOKEN_LOG";
 
-import { appendFileSync } from "fs";
 import type { OpenAI } from "openai";
+
+import { appendFileSync } from "fs";
 
 export function recordTokenUsage(
   model: string,
@@ -9,7 +10,9 @@ export function recordTokenUsage(
   completionTokens: number,
 ): void {
   const path = process.env[TOKEN_LOG_ENV_VAR];
-  if (!path) return;
+  if (!path) {
+    return;
+  }
   try {
     appendFileSync(path, `${model},${promptTokens},${completionTokens}\n`);
   } catch {
