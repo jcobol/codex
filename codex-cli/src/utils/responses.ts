@@ -1,14 +1,15 @@
 import type { OpenAI } from "openai";
+import type {
+  ResponseCreateParams,
+  Response,
+} from "openai/resources/responses/responses";
+
 import { logInput, logOutput } from "./io-log.js";
 import {
   recordTokenUsage,
   countPromptTokens,
   countTextTokens,
 } from "./token-metering.js";
-import type {
-  ResponseCreateParams,
-  Response,
-} from "openai/resources/responses/responses";
 
 // Define interfaces based on OpenAI API documentation
 type ResponseCreateInput = ResponseCreateParams;

@@ -11,7 +11,7 @@ import type { OpenAI } from "openai";
 test("recordTokenUsage appends to file", () => {
   const dir = mkdtempSync(join(tmpdir(), "codex-test-"));
   const file = join(dir, "log.csv");
-  process.env.CODEX_TOKEN_LOG = file;
+  process.env["CODEX_TOKEN_LOG"] = file;
   recordTokenUsage("model", 1, 2);
   const content = readFileSync(file, "utf8").trim();
   expect(content).toBe("model,1,2");
