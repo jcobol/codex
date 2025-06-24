@@ -37,6 +37,7 @@ import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import OpenAI, { APIConnectionTimeoutError, AzureOpenAI } from "openai";
 import os from "os";
+import { JsonResponse } from "../response-handler";
 import fs from "fs";
 
 // Wait time before retrying after rate limit errors (ms).
@@ -90,11 +91,7 @@ type AgentLoopParams = {
    */
   sendResponse?: (payload: string) => void;
   /** Optional object that will be serialized as the final JSON result. */
-  jsonResponse?: {
-    status?: string;
-    analysis?: string;
-    file_structure?: string;
-  };
+  jsonResponse?: JsonResponse;
 };
 
 const shellFunctionTool: FunctionTool = {
@@ -151,11 +148,7 @@ export class AgentLoop {
   ) => Promise<CommandConfirmation>;
   private onLastResponseId: (lastResponseId: string) => void;
   private sendResponse: (payload: string) => void;
-  public jsonResponse?: {
-    status?: string;
-    analysis?: string;
-    file_structure?: string;
-  };
+  public jsonResponse?: JsonResponse;
 
   /**
    * A reference to the currently active stream returned from the OpenAI
@@ -480,6 +473,14 @@ export class AgentLoop {
         this.execAbortController?.signal,
       );
       outputItem.output = JSON.stringify({ output: outputText, metadata });
+      if (this.jsonResponse && Array.isArray(args.cmd)) {
+        this.jsonResponse.file_structure[args.cmd.join(" ")] = outputText
+          .split("\n")
+          .filter((line) => line);
+        if (metadata.exit_code !== 0) {
+          this.jsonResponse.errors.push(outputText.trim());
+        }
+      }
 
       if (
         this.jsonResponse &&
@@ -556,6 +557,14 @@ export class AgentLoop {
       this.execAbortController?.signal,
     );
     outputItem.output = JSON.stringify({ output: outputText, metadata });
+    if (this.jsonResponse && Array.isArray(args.cmd)) {
+      this.jsonResponse.file_structure[args.cmd.join(" ")] = outputText
+        .split("\n")
+        .filter((line) => line);
+      if (metadata.exit_code !== 0) {
+        this.jsonResponse.errors.push(outputText.trim());
+      }
+    }
 
     if (
       this.jsonResponse &&
@@ -609,6 +618,7 @@ export class AgentLoop {
       log(
         `AgentLoop.run(): new execAbortController created (${this.execAbortController.signal}) for generation ${this.generation}`,
       );
+      this.jsonResponse = initializeJsonResponse();
       // NOTE: We no longer (re‑)attach an `abort` listener to `hardAbort` here.
       // A single listener that forwards the `abort` to the current
       // `execAbortController` is installed once in the constructor. Re‑adding a
@@ -1602,6 +1612,14 @@ export class AgentLoop {
         if (!this.jsonResponse.status) {
           this.jsonResponse.status = "complete";
         }
+        if (turnInput.length === 0) {
+          this.jsonResponse.analysis +=
+            "Task completed or no further tool calls possible.\n";
+          this.jsonResponse.status =
+            this.jsonResponse.errors.length > 0
+              ? "complete_with_limitations"
+              : "complete";
+        }
         try {
           this.sendResponse(JSON.stringify(this.jsonResponse));
         } catch {
@@ -1701,12 +1719,11 @@ As an agent, you must:
   - For file modifications, reference files as saved via \`apply_patch\`, not as needing manual saving. Do not show full contents of large files unless requested.
 
 **Task Execution Guidelines**:
-- Initialize a JSON response at the start of every complex task using \`initializeJsonResponse\` (e.g., {"overview": "", "file_structure": {}, "analysis": "", "errors": [], "status": "in_progress"}) and update it incrementally after each tool call, inference, or error. Submit the final JSON as the sole response, formatted as a JSON string (e.g., JSON.stringify({"overview": "...", ...})), with \`status: "complete"\` when all user-specified criteria are met, or \`status: "complete_with_limitations"\` if criteria cannot be fully met. If no further tool calls are possible, set \`status: "partial"\` and include all collected data. Do not output plain text responses like \`<think>\`; all output must contribute to the JSON response.
-- Always verify the project structure using the \`shell\` tool by executing: (1) \`shell ["ls", "-la", "codex-rs"]\`. Log results in the JSON \`file_structure\` field (e.g., \`file_structure: {"codex-rs": ["cli", "core", ...]}\`).
-- If the user references a specific path (e.g., \`src\`), validate its existence by executing: (1) \`shell ["ls", "-la", "codex-rs/src"]\`. If this fails, strictly follow this sequence: (a) execute \`shell ["cat", "codex-rs/Cargo.toml"]\` to identify workspace structure, logging in JSON \`analysis\` (e.g., \`analysis: "Workspace with crates: cli, core"\`), (b) execute up to three crate-specific path checks (e.g., \`shell ["ls", "-la", "cli/src"]\`, \`shell ["ls", "-la", "core/src"]\`, \`shell ["ls", "-la", "tui/src"]\`), logging in JSON \`file_structure\`, (c) check file-specific paths for entry points (e.g., \`shell ["cat", "cli/src/main.rs"]\`), logging in JSON \`analysis\`. Log all attempts and failures in JSON \`errors\` (e.g., \`errors: ["ls codex-rs/src: No such file or directory"]\`). Update JSON after each step to ensure response items are generated.
-- If a command fails (including sandbox errors like thread termination or timeouts), log the error in the JSON \`errors\` field and retry the command up to three times with a 5-second delay. If retries fail, execute a fallback command (e.g., \`shell ["ls", "-la", "."]\`, \`shell ["cat", "codex-rs/Cargo.toml"]\`) and log the outcome in JSON. If all attempts fail, update JSON \`status: "partial"\` and proceed with available data.
-- For Rust projects, always execute the sequence after verifying the project structure: (1) \`shell ["cat", "codex-rs/Cargo.toml"]\` to confirm workspace or crate configuration, logging in JSON \`analysis\`, (2) for each crate identified in Cargo.toml (e.g., cli, core), execute \`shell ["ls", "-la", "<crate>/src"]\` to list files, logging in JSON \`file_structure\`, (3) if a binary crate is identified (e.g., cli), execute \`shell ["cat", "<crate>/src/main.rs"]\` to analyze the entry point, logging in JSON \`analysis\`. Update JSON after each command to sustain iterations.
-- Reconcile user-specified actions (e.g., list files in \`src\`) by executing them only after path verification via \`shell\`. Log discrepancies between user assumptions and actual structure in JSON \`errors\` or \`analysis\` (e.g., \`analysis: "User-specified src not found; checked cli/src, core/src"\`).
+- Initialize a JSON response at the start of every complex task using \`initializeJsonResponse\` (e.g., {"overview": "", "file_structure": {}, "analysis": "", "errors": [], "status": "in_progress"}) and update it incrementally after each tool call or inference. Submit the final JSON as the sole response, formatted as a JSON string (e.g., JSON.stringify({"overview": "...", ...})), using the \`sendResponse\` function. Do not output plain text responses like \`<think>\`; all output, including intermediate thoughts, must update the JSON response (e.g., append to \`analysis\`). If no further tool calls are possible, set \`status: "partial"\` and submit the JSON with all collected data. Ensure JSON updates generate response items to sustain iterations and prevent premature termination.
+- Always verify the project structure using the \`shell\` tool by executing: (1) \`shell ["ls", "-la", "codex-rs"]\`, logging results in JSON \`file_structure\` (e.g., \`file_structure: {"codex-rs": ["cli", "core", ...]}\`).
+- For Rust projects, execute the following mandatory sequence after verifying the project structure: (1) \`shell ["cat", "codex-rs/Cargo.toml"]\` to confirm workspace or crate configuration, logging in JSON \`analysis\` (e.g., \`analysis: "Workspace with crates: cli, core, tui"\`), (2) for each crate identified in Cargo.toml (e.g., cli, core, tui), execute \`shell ["ls", "-la", "codex-rs/<crate>/src"]\` to list files, logging in JSON \`file_structure\`, (3) for binary crates (e.g., cli), execute \`shell ["cat", "codex-rs/<crate>/src/main.rs"]\` to analyze the entry point, logging in JSON \`analysis\`. Update JSON after each command with tool output (e.g., append to \`file_structure\`, \`analysis\`) or errors (e.g., append to \`errors\`) to sustain iterations. Do not terminate until all steps are complete or unfeasible.
+- If the user references a specific path (e.g., \`src\`), validate its existence by executing: (1) \`shell ["ls", "-la", "codex-rs/src"]\`. If this fails, proceed with the mandatory Rust project sequence above, logging all attempts and failures in JSON \`errors\` (e.g., \`errors: ["ls codex-rs/src: No such file or directory"]\`) and discrepancies in JSON \`analysis\` (e.g., \`analysis: "User-specified src not found; proceeding with cli/src, core/src"\`). Update JSON after each step to ensure response items are generated.
+- If a command fails (including sandbox errors like thread termination or timeouts), log the error in JSON \`errors\` and retry the command up to three times with a 5-second delay. If retries fail, execute a fallback command (e.g., \`shell ["ls", "-la", "."]\`, \`shell ["cat", "codex-rs/Cargo.toml"]\`) and log the outcome in JSON. If all attempts fail, update JSON \`status: "partial"\` and submit the JSON with available data.
 - Do not terminate until all user-specified completion criteria are met (e.g., overview provided, entry point analyzed, files listed via \`shell\`). If criteria cannot be met (e.g., no \`src\` directory), submit a JSON response explaining the issue (e.g., \`analysis: "No src directory found in codex-rs; checked cli/src, core/src"\`, \`status: "complete_with_limitations"\`) with all available findings. Ensure JSON updates after each tool call to prevent empty response termination.
 - If a tool call produces truncated or invalid output (e.g., thread termination, empty response), log it in JSON \`errors\` (e.g., \`errors: ["Tool call truncated: thread termination"]\`) and retry up to three times with a 5-second delay. If all attempts fail, execute a fallback (e.g., \`shell ["ls", "-la", "."]\`) and update JSON \`status: "partial"\` with collected data.
 - Never modify code related to \`CODEX_SANDBOX_NETWORK_DISABLED_ENV_VAR\`, as it supports sandboxed operations with \`CODEX_SANDBOX_NETWORK_DISABLED=1\`.

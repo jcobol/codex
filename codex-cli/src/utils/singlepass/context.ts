@@ -3,6 +3,7 @@ export interface FileContent {
   path: string;
   content: string;
 }
+import type { JsonResponse } from "../response-handler.js";
 
 /**
  * Represents the context for a task, including:

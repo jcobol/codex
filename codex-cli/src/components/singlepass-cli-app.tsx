@@ -11,6 +11,7 @@ import {
   generateEditSummary,
 } from "../utils/singlepass/code_diff";
 import { renderTaskContext } from "../utils/singlepass/context";
+import { initializeJsonResponse } from "../utils/response-handler";
 import {
   getFileContents,
   loadIgnorePatterns,
@@ -383,6 +384,7 @@ export function SinglePassApp({
     setPrompt(userPrompt);
     setShowSpinner(true);
     setState("thinking");
+    const jsonResp = initializeJsonResponse();
 
     try {
       const taskContextStr = renderTaskContext({
@@ -390,6 +392,7 @@ export function SinglePassApp({
         input_paths: [rootPath],
         input_paths_structure: "(omitted for brevity in single pass mode)",
         files,
+        json_response: jsonResp,
       });
 
       const openai = createOpenAIClient(config);
