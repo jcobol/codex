@@ -1,7 +1,6 @@
 import type { ReviewDecision } from "./review.js";
 import type { ApplyPatchCommand, ApprovalPolicy } from "../../approvals.js";
 import type { AppConfig } from "../config.js";
-import type { JsonResponse } from "../response-handler";
 import type { ResponseEvent } from "../responses.js";
 import type {
   ResponseFunctionToolCall,
@@ -24,6 +23,8 @@ import {
 import { log } from "../logger/log.js";
 import { parseToolCallArguments } from "../parsers.js";
 import { getEnvironmentInfo } from "../platform-info.js";
+import type { JsonResponse} from "../response-handler.js";
+import { initializeJsonResponse } from "../response-handler.js";
 import { responsesCreateViaChatCompletions } from "../responses.js";
 import {
   ORIGIN,
@@ -38,7 +39,6 @@ import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import OpenAI, { APIConnectionTimeoutError, AzureOpenAI } from "openai";
 import os from "os";
-import fs from "fs";
 
 // Wait time before retrying after rate limit errors (ms).
 const RATE_LIMIT_RETRY_WAIT_MS = parseInt(
