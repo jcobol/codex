@@ -4,6 +4,8 @@ export interface FileContent {
   content: string;
 }
 
+import type { JsonResponse } from "../response-handler.js";
+
 /**
  * Represents the context for a task, including:
  * - A prompt (the user's request)
@@ -16,6 +18,7 @@ export interface TaskContext {
   input_paths: Array<string>;
   input_paths_structure: string;
   files: Array<FileContent>;
+  json_response: JsonResponse;
 }
 
 /**
