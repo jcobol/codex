@@ -1,6 +1,7 @@
 import type { ReviewDecision } from "./review.js";
 import type { ApplyPatchCommand, ApprovalPolicy } from "../../approvals.js";
 import type { AppConfig } from "../config.js";
+import type { JsonResponse } from "../response-handler";
 import type { ResponseEvent } from "../responses.js";
 import type {
   ResponseFunctionToolCall,
@@ -37,7 +38,6 @@ import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import OpenAI, { APIConnectionTimeoutError, AzureOpenAI } from "openai";
 import os from "os";
-import { JsonResponse } from "../response-handler";
 import fs from "fs";
 
 // Wait time before retrying after rate limit errors (ms).
