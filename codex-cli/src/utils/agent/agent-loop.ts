@@ -37,6 +37,7 @@ import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import OpenAI, { APIConnectionTimeoutError, AzureOpenAI } from "openai";
 import os from "os";
+import fs from "fs";
 
 // Wait time before retrying after rate limit errors (ms).
 const RATE_LIMIT_RETRY_WAIT_MS = parseInt(
@@ -83,6 +84,17 @@ type AgentLoopParams = {
     applyPatch: ApplyPatchCommand | undefined,
   ) => Promise<CommandConfirmation>;
   onLastResponseId: (lastResponseId: string) => void;
+  /**
+   * Optional hook used for quiet/json modes to emit the final serialized
+   * response once the task has concluded.
+   */
+  sendResponse?: (payload: string) => void;
+  /** Optional object that will be serialized as the final JSON result. */
+  jsonResponse?: {
+    status?: string;
+    analysis?: string;
+    file_structure?: string;
+  };
 };
 
 const shellFunctionTool: FunctionTool = {
@@ -138,6 +150,12 @@ export class AgentLoop {
     applyPatch: ApplyPatchCommand | undefined,
   ) => Promise<CommandConfirmation>;
   private onLastResponseId: (lastResponseId: string) => void;
+  private sendResponse: (payload: string) => void;
+  public jsonResponse?: {
+    status?: string;
+    analysis?: string;
+    file_structure?: string;
+  };
 
   /**
    * A reference to the currently active stream returned from the OpenAI
@@ -282,6 +300,8 @@ export class AgentLoop {
     getCommandConfirmation,
     onLastResponseId,
     additionalWritableRoots,
+    sendResponse,
+    jsonResponse,
   }: AgentLoopParams & { config?: AppConfig }) {
     this.model = model;
     this.provider = provider;
@@ -302,6 +322,8 @@ export class AgentLoop {
     this.onLoading = onLoading;
     this.getCommandConfirmation = getCommandConfirmation;
     this.onLastResponseId = onLastResponseId;
+    this.sendResponse = sendResponse ?? (() => {});
+    this.jsonResponse = jsonResponse;
 
     this.disableResponseStorage = disableResponseStorage ?? false;
     this.sessionId = getSessionId() || randomUUID().replaceAll("-", "");
@@ -459,6 +481,14 @@ export class AgentLoop {
       );
       outputItem.output = JSON.stringify({ output: outputText, metadata });
 
+      if (
+        this.jsonResponse &&
+        Array.isArray(args.cmd) &&
+        ["ls", "find"].includes(args.cmd[0])
+      ) {
+        this.jsonResponse.file_structure = outputText;
+      }
+
       if (additionalItemsFromExec) {
         additionalItems.push(...additionalItemsFromExec);
       }
@@ -527,6 +557,14 @@ export class AgentLoop {
     );
     outputItem.output = JSON.stringify({ output: outputText, metadata });
 
+    if (
+      this.jsonResponse &&
+      Array.isArray(args.cmd) &&
+      ["ls", "find"].includes(args.cmd[0])
+    ) {
+      this.jsonResponse.file_structure = outputText;
+    }
+
     if (additionalItemsFromExec) {
       additionalItems.push(...additionalItemsFromExec);
     }
@@ -549,6 +587,11 @@ export class AgentLoop {
     try {
       if (this.terminated) {
         throw new Error("AgentLoop has been terminated");
+      }
+      if (this.jsonResponse && !fs.existsSync("src")) {
+        this.jsonResponse.status = "complete_with_limitations";
+        this.jsonResponse.analysis =
+          this.jsonResponse.analysis ?? "src directory missing";
       }
       // Record when we start "thinking" so we can report accurate elapsed time.
       const thinkingStart = Date.now();
@@ -1554,6 +1597,17 @@ export class AgentLoop {
 
       // Re‑throw all other errors so upstream handlers can decide what to do.
       throw err;
+    } finally {
+      if (this.jsonResponse) {
+        if (!this.jsonResponse.status) {
+          this.jsonResponse.status = "complete";
+        }
+        try {
+          this.sendResponse(JSON.stringify(this.jsonResponse));
+        } catch {
+          /* ignore */
+        }
+      }
     }
   }
 
