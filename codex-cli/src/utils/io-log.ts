@@ -4,7 +4,9 @@ import { appendFileSync } from "fs";
 
 function log(direction: string, data: unknown): void {
   const path = process.env[IO_LOG_ENV_VAR];
-  if (!path) return;
+  if (!path) {
+    return;
+  }
   try {
     const line = JSON.stringify({ direction, data }) + "\n";
     appendFileSync(path, line);

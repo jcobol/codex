@@ -36,6 +36,7 @@ pub mod protocol;
 mod rollout;
 mod safety;
 mod user_notification;
+pub mod prompt_assembler;
 pub mod util;
 
 pub use client_common::model_supports_reasoning_summaries;
