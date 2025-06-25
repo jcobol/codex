@@ -487,7 +487,9 @@ export class AgentLoop {
         Array.isArray(args.cmd) &&
         ["ls", "find"].includes(args.cmd[0])
       ) {
-        this.jsonResponse.file_structure = outputText;
+        this.jsonResponse.file_structure[args.cmd.join(" ")] = outputText
+          .split("\n")
+          .filter((line) => line);
       }
 
       if (additionalItemsFromExec) {
@@ -571,7 +573,9 @@ export class AgentLoop {
       Array.isArray(args.cmd) &&
       ["ls", "find"].includes(args.cmd[0])
     ) {
-      this.jsonResponse.file_structure = outputText;
+      this.jsonResponse.file_structure[args.cmd.join(" ")] = outputText
+        .split("\n")
+        .filter((line) => line);
     }
 
     if (additionalItemsFromExec) {
