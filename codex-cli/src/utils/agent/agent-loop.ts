@@ -597,6 +597,7 @@ export class AgentLoop {
     // the user retry the request if desired.
     // ---------------------------------------------------------------------
 
+    let turnInput: Array<ResponseInputItem> = [];
     try {
       if (this.terminated) {
         throw new Error("AgentLoop has been terminated");
@@ -674,7 +675,7 @@ export class AgentLoop {
       // conversation, so we must include the *entire* transcript (minus system
       // messages) on every call.
 
-      let turnInput: Array<ResponseInputItem> = [];
+      turnInput = [];
       // Keeps track of how many items in `turnInput` stem from the existing
       // transcript so we can avoid re‑emitting them to the UI. Only used when
       // `disableResponseStorage === true`.
