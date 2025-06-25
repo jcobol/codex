@@ -487,7 +487,9 @@ export class AgentLoop {
         Array.isArray(args.cmd) &&
         ["ls", "find"].includes(args.cmd[0])
       ) {
-        this.jsonResponse.file_structure = outputText;
+        this.jsonResponse.file_structure[args.cmd.join(" ")] = outputText
+          .split("\n")
+          .filter((line) => line);
       }
 
       if (additionalItemsFromExec) {
@@ -571,7 +573,9 @@ export class AgentLoop {
       Array.isArray(args.cmd) &&
       ["ls", "find"].includes(args.cmd[0])
     ) {
-      this.jsonResponse.file_structure = outputText;
+      this.jsonResponse.file_structure[args.cmd.join(" ")] = outputText
+        .split("\n")
+        .filter((line) => line);
     }
 
     if (additionalItemsFromExec) {
@@ -593,6 +597,7 @@ export class AgentLoop {
     // the user retry the request if desired.
     // ---------------------------------------------------------------------
 
+    let turnInput: Array<ResponseInputItem> = [];
     try {
       if (this.terminated) {
         throw new Error("AgentLoop has been terminated");
@@ -619,6 +624,11 @@ export class AgentLoop {
         `AgentLoop.run(): new execAbortController created (${this.execAbortController.signal}) for generation ${this.generation}`,
       );
       this.jsonResponse = initializeJsonResponse();
+      log(
+        `AgentLoop.run(): initialized jsonResponse ${JSON.stringify(
+          this.jsonResponse,
+        )}`,
+      );
       // NOTE: We no longer (re‑)attach an `abort` listener to `hardAbort` here.
       // A single listener that forwards the `abort` to the current
       // `execAbortController` is installed once in the constructor. Re‑adding a
@@ -665,7 +675,7 @@ export class AgentLoop {
       // conversation, so we must include the *entire* transcript (minus system
       // messages) on every call.
 
-      let turnInput: Array<ResponseInputItem> = [];
+      turnInput = [];
       // Keeps track of how many items in `turnInput` stem from the existing
       // transcript so we can avoid re‑emitting them to the UI. Only used when
       // `disableResponseStorage === true`.
@@ -1072,6 +1082,16 @@ export class AgentLoop {
 
         // Keep track of the active stream so it can be aborted on demand.
         this.currentStream = stream;
+        const streamAny = stream as unknown as {
+          on?: (ev: string, cb: (...args: Array<unknown>) => void) => void;
+        };
+        if (streamAny?.on) {
+          log("AgentLoop.run(): attaching stream event listeners");
+          streamAny.on("end", () => log("AgentLoop.run(): stream end"));
+          streamAny.on("error", (e) =>
+            log(`AgentLoop.run(): stream error ${e}`),
+          );
+        }
 
         // Guard against an undefined stream before iterating.
         if (!stream) {
@@ -1191,10 +1211,12 @@ export class AgentLoop {
             // current turn inputs available for retries.
             turnInput = newTurnInput;
 
+            log("AgentLoop.run(): stream for-await loop completed");
             // Stream finished successfully – leave the retry loop.
             break;
-          } catch (err: unknown) {
-            const isRateLimitError = (e: unknown): boolean => {
+            } catch (err: unknown) {
+              log(`AgentLoop.run(): stream loop error ${err}`);
+              const isRateLimitError = (e: unknown): boolean => {
               if (!e || typeof e !== "object") {
                 return false;
               }
@@ -1609,6 +1631,11 @@ export class AgentLoop {
       throw err;
     } finally {
       if (this.jsonResponse) {
+        log(
+          `AgentLoop.run(): jsonResponse before finalization ${JSON.stringify(
+            this.jsonResponse,
+          )}`,
+        );
         if (!this.jsonResponse.status) {
           this.jsonResponse.status = "complete";
         }
@@ -1621,10 +1648,21 @@ export class AgentLoop {
               : "complete";
         }
         try {
-          this.sendResponse(JSON.stringify(this.jsonResponse));
-        } catch {
-          /* ignore */
+          if (typeof this.sendResponse === "function") {
+            log("AgentLoop.run(): invoking sendResponse");
+            this.sendResponse(JSON.stringify(this.jsonResponse));
+            log("AgentLoop.run(): sendResponse completed");
+          } else {
+            log("AgentLoop.run(): sendResponse is undefined");
+          }
+        } catch (err) {
+          log(`AgentLoop.run(): sendResponse error ${err}`);
         }
+        log(
+          `AgentLoop.run(): jsonResponse after sendResponse ${JSON.stringify(
+            this.jsonResponse,
+          )}`,
+        );
       }
     }
   }

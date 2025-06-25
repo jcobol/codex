@@ -12,6 +12,7 @@ import {
 } from "../utils/singlepass/code_diff";
 import { renderTaskContext } from "../utils/singlepass/context";
 import { initializeJsonResponse } from "../utils/response-handler";
+import { log } from "../utils/logger/log.js";
 import {
   getFileContents,
   loadIgnorePatterns,
@@ -385,6 +386,14 @@ export function SinglePassApp({
     setShowSpinner(true);
     setState("thinking");
     const jsonResp = initializeJsonResponse();
+    log(
+      `SinglePassApp.runSinglePassTask(): initialized jsonResp ${JSON.stringify(
+        jsonResp,
+      )}`,
+    );
+    const sendResponse = (payload: string) => {
+      log(`SinglePassApp.runSinglePassTask(): sendResponse ${payload.length}`);
+    };
 
     try {
       const taskContextStr = renderTaskContext({
@@ -435,9 +444,17 @@ export function SinglePassApp({
       const summary = generateEditSummary(opsToApply, originalMap);
       setDiffInfo({ summary, diffs: combinedDiffs, ops: opsToApply });
       setApplyOps(opsToApply);
+      log(
+        `SinglePassApp.runSinglePassTask(): finished processing, jsonResp ${JSON.stringify(
+          jsonResp,
+        )}`,
+      );
+      sendResponse(JSON.stringify(jsonResp));
       setState("confirm");
     } catch (err) {
       setShowSpinner(false);
+      log(`SinglePassApp.runSinglePassTask(): error ${err}`);
+      sendResponse(JSON.stringify(jsonResp));
       setState("error");
     }
   }

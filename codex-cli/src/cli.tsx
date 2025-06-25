@@ -42,10 +42,11 @@ import {
   maybeRedeemCredits,
 } from "./utils/get-api-key";
 import { createInputItem } from "./utils/input-utils";
-import { initLogger } from "./utils/logger/log";
+import { initLogger, log } from "./utils/logger/log";
 import { isModelSupportedForResponses } from "./utils/model-utils.js";
 import { parseToolCall } from "./utils/parsers";
 import { onExit, setInkRenderer } from "./utils/terminal";
+import { initializeJsonResponse } from "./utils/response-handler";
 import chalk from "chalk";
 import { spawnSync } from "child_process";
 import fs from "fs";
@@ -650,6 +651,11 @@ async function runQuietMode({
   additionalWritableRoots: ReadonlyArray<string>;
   config: AppConfig;
 }): Promise<void> {
+  const jsonResp = initializeJsonResponse();
+  log(
+    `runQuietMode(): initialized jsonResp ${JSON.stringify(jsonResp)}`,
+  );
+
   const agent = new AgentLoop({
     model: config.model,
     config: config,
@@ -658,6 +664,12 @@ async function runQuietMode({
     approvalPolicy,
     additionalWritableRoots,
     disableResponseStorage: config.disableResponseStorage,
+    jsonResponse: jsonResp,
+    sendResponse: (payload: string) => {
+      log(`runQuietMode(): sendResponse ${payload.length}`);
+      // eslint-disable-next-line no-console
+      console.log(payload);
+    },
     onItem: (item: ResponseItem) => {
       // eslint-disable-next-line no-console
       console.log(formatResponseItemForQuietMode(item));
