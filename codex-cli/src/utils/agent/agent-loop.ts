@@ -23,7 +23,7 @@ import {
 import { log } from "../logger/log.js";
 import { parseToolCallArguments } from "../parsers.js";
 import { getEnvironmentInfo } from "../platform-info.js";
-import type { JsonResponse} from "../response-handler.js";
+import type { JsonResponse } from "../response-handler.js";
 import { initializeJsonResponse } from "../response-handler.js";
 import { responsesCreateViaChatCompletions } from "../responses.js";
 import {
@@ -1214,9 +1214,9 @@ export class AgentLoop {
             log("AgentLoop.run(): stream for-await loop completed");
             // Stream finished successfully – leave the retry loop.
             break;
-            } catch (err: unknown) {
-              log(`AgentLoop.run(): stream loop error ${err}`);
-              const isRateLimitError = (e: unknown): boolean => {
+          } catch (err: unknown) {
+            log(`AgentLoop.run(): stream loop error ${err}`);
+            const isRateLimitError = (e: unknown): boolean => {
               if (!e || typeof e !== "object") {
                 return false;
               }
@@ -1760,7 +1760,7 @@ As an agent, you must:
 - Initialize a JSON response at the start of every complex task using \`initializeJsonResponse\` (e.g., {"overview": "", "file_structure": {}, "analysis": "", "errors": [], "status": "in_progress"}) and update it incrementally after each tool call or inference. Submit the final JSON as the sole response, formatted as a JSON string (e.g., JSON.stringify({"overview": "...", ...})), using the \`sendResponse\` function. All outputs, including intermediate reasoning, must exclusively update \`jsonResponse.analysis\` to sustain response items; plain text outputs like \`<think>\` are strictly prohibited. If no further tool calls are possible, set \`status: "partial"\` and submit the JSON with all collected data. Ensure JSON updates generate response items to sustain iterations and prevent premature termination.
 - Always verify the project structure using the \`shell\` tool by executing: (1) \`shell ["ls", "-la", "codex-rs"]\`, logging results in JSON \`file_structure\` (e.g., \`file_structure: {"codex-rs": ["cli", "core", ...]}\`).
 - For Rust projects, execute the following mandatory sequence after verifying the project structure and do not terminate until every step succeeds or is deemed impossible: (1) \`shell ["cat", "codex-rs/Cargo.toml"]\` to confirm workspace or crate configuration, logging in JSON \`analysis\` (e.g., \`analysis: "Workspace with crates: cli, core, tui"\`), (2) for each crate identified in Cargo.toml (e.g., cli, core, tui), execute \`shell ["ls", "-la", "codex-rs/<crate>/src"]\` to list files, logging in JSON \`file_structure\`, (3) for binary crates (e.g., cli), execute \`shell ["cat", "codex-rs/<crate>/src/main.rs"]\` to analyze the entry point, logging in JSON \`analysis\`. Update JSON after each command with tool output (e.g., append to \`file_structure\`, \`analysis\`) or errors (e.g., append to \`errors\`) to sustain iterations.
-- If the user references a specific path (e.g., `src`), validate its existence by executing: (1) `shell ["ls", "-la", "codex-rs/src"]`. If this fails, check crate-specific directories such as `cli/src` and `core/src` using the mandatory Rust project sequence. Log all attempts and failures in JSON `errors` and note discrepancies in JSON `analysis` (e.g., `analysis: "User-specified src not found; proceeding with cli/src, core/src"`). Update JSON after each step to ensure response items are generated.
+- If the user references a specific path (e.g., \`src\`), validate its existence by executing: (1) \`shell ["ls", "-la", "codex-rs/src"]\`. If this fails, check crate-specific directories such as \`cli/src\` and \`core/src\` using the mandatory Rust project sequence. Log all attempts and failures in JSON \`errors\` and note discrepancies in JSON \`analysis\` (e.g., \`analysis: "User-specified src not found; proceeding with cli/src, core/src"\`). Update JSON after each step to ensure response items are generated.
 - If a command fails (including sandbox errors like thread termination or timeouts), log the error in JSON \`errors\` and retry the command up to three times with a 5-second delay. If retries fail, execute a fallback command (e.g., \`shell ["ls", "-la", "."]\`, \`shell ["cat", "codex-rs/Cargo.toml"]\`) and log the outcome in JSON. If all attempts fail, update JSON \`status: "partial"\` and submit the JSON with available data.
 - Do not terminate until all user-specified completion criteria are met (e.g., overview provided, entry point analyzed, files listed via \`shell\`). If criteria cannot be met (e.g., no \`src\` directory), submit a JSON response explaining the issue (e.g., \`analysis: "No src directory found in codex-rs; checked cli/src, core/src"\`, \`status: "complete_with_limitations"\`) with all available findings. Ensure JSON updates after each tool call to prevent empty response termination.
 - If a tool call produces truncated or invalid output (e.g., thread termination, empty response), log it in JSON \`errors\` (e.g., \`errors: ["Tool call truncated: thread termination"]\`) and retry up to three times with a 5-second delay. If all attempts fail, execute a fallback (e.g., \`shell ["ls", "-la", "."]\`) and update JSON \`status: "partial"\` with collected data.
