@@ -126,6 +126,14 @@ const localShellTool: Tool = {
   type: "local_shell",
 };
 
+const lastResponseTool: FunctionTool = {
+  type: "function",
+  name: "last_response",
+  description: "Indicates the model has completed its task and no further turns are required.",
+  strict: false,
+  parameters: { type: "object", properties: {}, additionalProperties: false },
+};
+
 export class AgentLoop {
   private model: string;
   private provider: string;
@@ -185,6 +193,8 @@ export class AgentLoop {
    *    400 | No tool output found for function call …
    *  error from OpenAI. */
   private pendingAborts: Set<string> = new Set();
+  /** When set the current run will end after processing the present turn. */
+  private stopAfterCurrentTurn = false;
   /** Set to true by `terminate()` – prevents any further use of the instance. */
   private terminated = false;
   /** Master abort controller – fires when terminate() is invoked. */
@@ -465,6 +475,11 @@ export class AgentLoop {
     // used to tell model to stop if needed
     const additionalItems: Array<ResponseInputItem> = [];
 
+    if (name === "last_response") {
+      this.stopAfterCurrentTurn = true;
+      return [];
+    }
+
     // TODO: allow arbitrary function calls (beyond shell/container.exec)
     if (name === "container.exec" || name === "shell") {
       const {
@@ -601,6 +616,7 @@ export class AgentLoop {
 
       // Reset cancellation flag and stream for a fresh run.
       this.canceled = false;
+      this.stopAfterCurrentTurn = false;
       this.currentStream = null;
 
       // Create a fresh AbortController for this run so that tool calls from a
@@ -661,9 +677,9 @@ export class AgentLoop {
       // `disableResponseStorage === true`.
       let transcriptPrefixLen = 0;
 
-      let tools: Array<Tool> = [shellFunctionTool];
+      let tools: Array<Tool> = [shellFunctionTool, lastResponseTool];
       if (this.model.startsWith("codex")) {
-        tools = [localShellTool];
+        tools = [localShellTool, lastResponseTool];
       }
 
       const stripInternalFields = (
@@ -1179,7 +1195,7 @@ export class AgentLoop {
             // the next turn to an empty array to prevent an infinite loop.
             // And don't update the turn input too early otherwise we won't have the
             // current turn inputs available for retries.
-            turnInput = newTurnInput;
+            turnInput = this.stopAfterCurrentTurn ? [] : newTurnInput;
 
             // Stream finished successfully – leave the retry loop.
             break;
@@ -1689,6 +1705,7 @@ You MUST adhere to the following criteria when executing the task:
 - Showing user code and tool call details is allowed.
 - User instructions may overwrite the *CODING GUIDELINES* section in this developer message.
 - Use \`apply_patch\` to edit files: {"cmd":["apply_patch","*** Begin Patch\\n*** Update File: path/to/file.py\\n@@ def example():\\n-  pass\\n+  return 123\\n*** End Patch"]}
+- To end your turn early, call \`last_response\`: {"cmd":["last_response"]}
 - If completing the user's task requires writing or modifying files:
     - Your code and final answer should follow these *CODING GUIDELINES*:
         - Fix the problem at the root cause rather than applying surface-level patches, when possible.
