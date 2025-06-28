@@ -48,6 +48,9 @@ const RATE_LIMIT_RETRY_WAIT_MS = parseInt(
 // See https://github.com/openai/openai-node/tree/v4?tab=readme-ov-file#configuring-an-https-agent-eg-for-proxies
 const PROXY_URL = process.env["HTTPS_PROXY"];
 
+// Retry count when the model fails to invoke any tool
+const NO_TOOL_CALL_MAX_RETRIES = 5;
+
 export type CommandConfirmation = {
   review: ReviewDecision;
   applyPatch?: ApplyPatchCommand | undefined;
@@ -815,6 +818,8 @@ export class AgentLoop {
           this.onLoading(false);
           return;
         }
+
+        let noToolCallRetry = 0;
         // send request to openAI
         // Only surface the *new* input items to the UI – replaying the entire
         // transcript would duplicate messages that have already been shown in
@@ -1088,6 +1093,8 @@ export class AgentLoop {
 
         const MAX_STREAM_RETRIES = 5;
         let streamRetryAttempt = 0;
+        let sawToolCall = false;
+        let needToolRetry = false;
 
         // eslint-disable-next-line no-constant-condition
         while (true) {
@@ -1111,6 +1118,7 @@ export class AgentLoop {
                   item.type === "function_call" ||
                   item.type === "local_shell_call"
                 ) {
+                  sawToolCall = true;
                   // Track outstanding tool call so we can abort later if needed.
                   // The item comes from the streaming response, therefore it has
                   // either `id` (chat) or `call_id` (responses) – we normalise
@@ -1196,6 +1204,30 @@ export class AgentLoop {
             // And don't update the turn input too early otherwise we won't have the
             // current turn inputs available for retries.
             turnInput = this.stopAfterCurrentTurn ? [] : newTurnInput;
+
+            if (!this.stopAfterCurrentTurn && !sawToolCall) {
+              if (noToolCallRetry < NO_TOOL_CALL_MAX_RETRIES) {
+                noToolCallRetry += 1;
+                log(
+                  `Model did not invoke a tool – retry ${noToolCallRetry}/${NO_TOOL_CALL_MAX_RETRIES}`,
+                );
+                needToolRetry = true;
+              } else {
+                this.onItem({
+                  id: `error-${Date.now()}`,
+                  type: "message",
+                  role: "system",
+                  content: [
+                    {
+                      type: "input_text",
+                      text: "⚠️  Model failed to call a tool after multiple retries.",
+                    },
+                  ],
+                });
+                this.onLoading(false);
+                return;
+              }
+            }
 
             // Stream finished successfully – leave the retry loop.
             break;
@@ -1335,6 +1367,10 @@ export class AgentLoop {
             this.currentStream = null;
           }
         } // end while retry loop
+
+        if (needToolRetry) {
+          continue;
+        }
 
         log(
           `Turn inputs (${turnInput.length}) - ${turnInput
@@ -1705,6 +1741,7 @@ You MUST adhere to the following criteria when executing the task:
 - Showing user code and tool call details is allowed.
 - User instructions may overwrite the *CODING GUIDELINES* section in this developer message.
 - Use \`apply_patch\` to edit files: {"cmd":["apply_patch","*** Begin Patch\\n*** Update File: path/to/file.py\\n@@ def example():\\n-  pass\\n+  return 123\\n*** End Patch"]}
+- Every response MUST include a tool call. Use \`last_response\` as your final tool invocation when the task is complete.
 - To end your turn early, call \`last_response\`: {"cmd":["last_response"]}
 - If completing the user's task requires writing or modifying files:
     - Your code and final answer should follow these *CODING GUIDELINES*:
