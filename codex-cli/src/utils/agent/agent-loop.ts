@@ -395,6 +395,86 @@ export class AgentLoop {
     );
   }
 
+  private stripInternalFields(item: ResponseInputItem): ResponseInputItem {
+    const clean = { ...item } as Record<string, unknown>;
+    delete clean["duration_ms"];
+    delete clean["id"];
+    delete clean["status"];
+    return clean as unknown as ResponseInputItem;
+  }
+
+  private isRateLimitError(e: unknown): boolean {
+    if (!e || typeof e !== "object") {
+      return false;
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ex: any = e;
+    return (
+      ex.status === 429 ||
+      ex.code === "rate_limit_exceeded" ||
+      ex.type === "rate_limit_exceeded"
+    );
+  }
+
+  private isNetworkOrServerError(err: unknown): boolean {
+    if (!err || typeof err !== "object") {
+      return false;
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const e: any = err;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ApiConnErrCtor = (OpenAI as any).APIConnectionError as
+      | (new (...args: any) => Error)
+      | undefined;
+    if (ApiConnErrCtor && e instanceof ApiConnErrCtor) {
+      return true;
+    }
+    const NETWORK_ERRNOS = new Set([
+      "ECONNRESET",
+      "ECONNREFUSED",
+      "EPIPE",
+      "ENOTFOUND",
+      "ETIMEDOUT",
+      "EAI_AGAIN",
+    ]);
+    if (typeof e.code === "string" && NETWORK_ERRNOS.has(e.code)) {
+      return true;
+    }
+    if (
+      e.cause &&
+      typeof e.cause === "object" &&
+      NETWORK_ERRNOS.has((e.cause as { code?: string }).code ?? "")
+    ) {
+      return true;
+    }
+    if (typeof e.status === "number" && e.status >= 500) {
+      return true;
+    }
+    if (typeof e.message === "string" && /network|socket|stream/i.test(e.message)) {
+      return true;
+    }
+    return false;
+  }
+
+  private isInvalidRequestError(err: unknown): boolean {
+    if (!err || typeof err !== "object") {
+      return false;
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const e: any = err;
+    if (e.type === "invalid_request_error" && e.code === "model_not_found") {
+      return true;
+    }
+    if (
+      e.cause &&
+      e.cause.type === "invalid_request_error" &&
+      e.cause.code === "model_not_found"
+    ) {
+      return true;
+    }
+    return false;
+  }
+
   private async handleFunctionCall(
     item: ResponseFunctionToolCall,
   ): Promise<Array<ResponseInputItem>> {
@@ -682,23 +762,7 @@ export class AgentLoop {
         tools = [localShellTool, lastResponseTool];
       }
 
-      const stripInternalFields = (
-        item: ResponseInputItem,
-      ): ResponseInputItem => {
-        // Clone shallowly and remove fields that are not part of the public
-        // schema expected by the OpenAI Responses API.
-        // We shallow‑clone the item so that subsequent mutations (deleting
-        // internal fields) do not affect the original object which may still
-        // be referenced elsewhere (e.g. UI components).
-        const clean = { ...item } as Record<string, unknown>;
-        delete clean["duration_ms"];
-        // Remove OpenAI-assigned identifiers and transient status so the
-        // backend does not reject items that were never persisted because we
-        // use `store: false`.
-        delete clean["id"];
-        delete clean["status"];
-        return clean as unknown as ResponseInputItem;
-      };
+      const stripInternalFields = this.stripInternalFields.bind(this);
 
       if (this.disableResponseStorage) {
         // Remember where the existing transcript ends – everything after this
@@ -1200,21 +1264,8 @@ export class AgentLoop {
             // Stream finished successfully – leave the retry loop.
             break;
           } catch (err: unknown) {
-            const isRateLimitError = (e: unknown): boolean => {
-              if (!e || typeof e !== "object") {
-                return false;
-              }
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              const ex: any = e;
-              return (
-                ex.status === 429 ||
-                ex.code === "rate_limit_exceeded" ||
-                ex.type === "rate_limit_exceeded"
-              );
-            };
-
             if (
-              isRateLimitError(err) &&
+              this.isRateLimitError(err) &&
               streamRetryAttempt < MAX_STREAM_RETRIES
             ) {
               streamRetryAttempt += 1;
@@ -1465,61 +1516,7 @@ export class AgentLoop {
       // resolve gracefully so callers can choose to retry.
       // -------------------------------------------------------------------
 
-      const NETWORK_ERRNOS = new Set([
-        "ECONNRESET",
-        "ECONNREFUSED",
-        "EPIPE",
-        "ENOTFOUND",
-        "ETIMEDOUT",
-        "EAI_AGAIN",
-      ]);
-
-      const isNetworkOrServerError = (() => {
-        if (!err || typeof err !== "object") {
-          return false;
-        }
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const e: any = err;
-
-        // Direct instance check for connection errors thrown by the OpenAI SDK.
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const ApiConnErrCtor = (OpenAI as any).APIConnectionError as  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          | (new (...args: any) => Error)
-          | undefined;
-        if (ApiConnErrCtor && e instanceof ApiConnErrCtor) {
-          return true;
-        }
-
-        if (typeof e.code === "string" && NETWORK_ERRNOS.has(e.code)) {
-          return true;
-        }
-
-        // When the OpenAI SDK nests the underlying network failure inside the
-        // `cause` property we surface it as well so callers do not see an
-        // unhandled exception for errors like ENOTFOUND, ECONNRESET …
-        if (
-          e.cause &&
-          typeof e.cause === "object" &&
-          NETWORK_ERRNOS.has((e.cause as { code?: string }).code ?? "")
-        ) {
-          return true;
-        }
-
-        if (typeof e.status === "number" && e.status >= 500) {
-          return true;
-        }
-
-        // Fallback to a heuristic string match so we still catch future SDK
-        // variations without enumerating every errno.
-        if (
-          typeof e.message === "string" &&
-          /network|socket|stream/i.test(e.message)
-        ) {
-          return true;
-        }
-
-        return false;
-      })();
+      const isNetworkOrServerError = this.isNetworkOrServerError(err);
 
       if (isNetworkOrServerError) {
         try {
@@ -1543,32 +1540,9 @@ export class AgentLoop {
         return;
       }
 
-      const isInvalidRequestError = () => {
-        if (!err || typeof err !== "object") {
-          return false;
-        }
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const e: any = err;
+      const isInvalidRequestError = this.isInvalidRequestError(err);
 
-        if (
-          e.type === "invalid_request_error" &&
-          e.code === "model_not_found"
-        ) {
-          return true;
-        }
-
-        if (
-          e.cause &&
-          e.cause.type === "invalid_request_error" &&
-          e.cause.code === "model_not_found"
-        ) {
-          return true;
-        }
-
-        return false;
-      };
-
-      if (isInvalidRequestError()) {
+      if (isInvalidRequestError) {
         try {
           // Extract request ID and error details from the error object
 
