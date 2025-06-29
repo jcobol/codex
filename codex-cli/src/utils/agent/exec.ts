@@ -132,6 +132,9 @@ export function execApplyPatch(
     };
   }
 
+  // End of execApplyPatch
+}
+
 export function execApplyPatchSr(
   patchText: string,
   workdir: string | undefined = undefined,
