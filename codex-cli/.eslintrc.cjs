@@ -24,17 +24,7 @@ module.exports = {
     "@typescript-eslint/consistent-type-imports": "error",
     "import/no-cycle": ["error", { maxDepth: 1 }],
     "import/no-duplicates": "error",
-    "import/order": [
-      "error",
-      {
-        groups: ["type"],
-        "newlines-between": "always",
-        alphabetize: {
-          order: "asc",
-          caseInsensitive: false,
-        },
-      },
-    ],
+    "import/order": "off",
     // We use the import/ plugin instead.
     "sort-imports": "off",
 
