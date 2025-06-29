@@ -92,6 +92,7 @@ const cli = meow(
     --no-project-doc           Do not automatically include the repository's 'AGENTS.md'
     --project-doc <file>       Include an additional markdown file at <file> as context
     --full-stdout              Do not truncate stdout/stderr from command outputs
+    --exit                     Exit after the model finishes responding
     --notify                   Enable desktop notifications for responses
 
     --disable-response-storage Disable server‑side response storage (sends the
@@ -186,6 +187,10 @@ const cli = meow(
         description:
           "Disable truncation of command stdout/stderr messages (show everything)",
         aliases: ["no-truncate"],
+      },
+      exit: {
+        type: "boolean",
+        description: "Exit after the initial run has completed",
       },
       reasoning: {
         type: "string",
@@ -581,6 +586,7 @@ const instance = render(
     approvalPolicy={approvalPolicy}
     additionalWritableRoots={additionalWritableRoots}
     fullStdout={Boolean(cli.flags.fullStdout)}
+    exitAfterRun={Boolean(cli.flags.exit)}
   />,
   {
     patchConsole: process.env["DEBUG"] ? false : true,
