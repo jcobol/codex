@@ -37,7 +37,8 @@ import ModelOverlay from "../model-overlay.js";
 import SessionsOverlay from "../sessions-overlay.js";
 import chalk from "chalk";
 import fs from "fs/promises";
-import { Box, Text } from "ink";
+import { Box, Text, useApp } from "ink";
+import { onExit } from "../../utils/terminal.js";
 import { spawn } from "node:child_process";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { inspect } from "util";
@@ -58,6 +59,7 @@ type Props = {
   approvalPolicy: ApprovalPolicy;
   additionalWritableRoots: ReadonlyArray<string>;
   fullStdout: boolean;
+  exitAfterRun?: boolean;
 };
 
 const colorsByPolicy: Record<ApprovalPolicy, ColorName | undefined> = {
@@ -143,8 +145,10 @@ export default function TerminalChat({
   approvalPolicy: initialApprovalPolicy,
   additionalWritableRoots,
   fullStdout,
+  exitAfterRun,
 }: Props): React.ReactElement {
   const notify = Boolean(config.notify);
+  const app = useApp();
   const [model, setModel] = useState<string>(config.model);
   const [provider, setProvider] = useState<string>(config.provider || "openai");
   const [lastResponseId, setLastResponseId] = useState<string | null>(null);
@@ -576,7 +580,13 @@ export default function TerminalChat({
               ]);
             }}
             submitInput={(inputs) => {
-              agent.run(inputs, lastResponseId || "");
+              agent.run(inputs, lastResponseId || "").then(() => {
+                if (exitAfterRun) {
+                  app.exit();
+                  onExit();
+                  process.exit(0);
+                }
+              });
               return {};
             }}
             items={items}
