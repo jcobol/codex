@@ -25,6 +25,7 @@ type Props = {
   approvalPolicy: ApprovalPolicy;
   additionalWritableRoots: ReadonlyArray<string>;
   fullStdout: boolean;
+  exitAfterRun?: boolean;
 };
 
 export default function App({
@@ -35,6 +36,7 @@ export default function App({
   approvalPolicy,
   additionalWritableRoots,
   fullStdout,
+  exitAfterRun,
 }: Props): JSX.Element {
   const app = useApp();
   const [accepted, setAccepted] = useState(() => false);
@@ -103,6 +105,7 @@ export default function App({
       approvalPolicy={approvalPolicy}
       additionalWritableRoots={additionalWritableRoots}
       fullStdout={fullStdout}
+      exitAfterRun={exitAfterRun}
     />
   );
 }
