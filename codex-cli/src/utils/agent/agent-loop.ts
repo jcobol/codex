@@ -129,7 +129,8 @@ const localShellTool: Tool = {
 const lastResponseTool: FunctionTool = {
   type: "function",
   name: "last_response",
-  description: "Indicates the model has completed its task and no further turns are required.",
+  description:
+    "Indicates the model has completed its task and no further turns are required.",
   strict: false,
   parameters: { type: "object", properties: {}, additionalProperties: false },
 };
@@ -423,9 +424,9 @@ export class AgentLoop {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const e: any = err;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const ApiConnErrCtor = (OpenAI as any).APIConnectionError as
-      | (new (...args: any) => Error)
-      | undefined;
+    const ApiConnErrCtor = (OpenAI as any)
+      .APIConnectionError as // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (new (...args: any) => Error) | undefined;
     if (ApiConnErrCtor && e instanceof ApiConnErrCtor) {
       return true;
     }
@@ -450,7 +451,10 @@ export class AgentLoop {
     if (typeof e.status === "number" && e.status >= 500) {
       return true;
     }
-    if (typeof e.message === "string" && /network|socket|stream/i.test(e.message)) {
+    if (
+      typeof e.message === "string" &&
+      /network|socket|stream/i.test(e.message)
+    ) {
       return true;
     }
     return false;
@@ -1703,6 +1707,7 @@ You MUST adhere to the following criteria when executing the task:
 - When your task involves writing or modifying files:
     - Do NOT tell the user to "save the file" or "copy the code into a file" if you already created or modified the file using \`apply_patch\`. Instead, reference the file as already saved.
     - Do NOT show the full contents of large files you have already written, unless the user explicitly asks for them.
+- If the user refers to a filename without path information and the file does not exist, try and find the file using the \`find . -name FILENAME\` command.
 
 ${dynamicPrefix}`;
 
