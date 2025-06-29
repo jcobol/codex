@@ -4,6 +4,7 @@ import type { SpawnOptions } from "child_process";
 import type { ParseEntry } from "shell-quote";
 
 import { process_patch } from "./apply-patch.js";
+import { apply_search_replace_patch, PATCH_SUFFIX_SR } from "./apply-patch-sr.js";
 import { SandboxType } from "./sandbox/interface.js";
 import { execWithLandlock } from "./sandbox/landlock.js";
 import { execWithSeatbelt } from "./sandbox/macos-seatbelt.js";
@@ -129,6 +130,37 @@ export function execApplyPatch(
       stderr: stderr,
       exitCode: 1,
     };
+  }
+
+export function execApplyPatchSr(
+  patchText: string,
+  workdir: string | undefined = undefined,
+): ExecResult {
+  let input = patchText
+    .replace(/('|")?<<('|")EOF('|")/, "")
+    .replace(/\*\*\* End Patch\nEOF('|")?/, "*** End Patch")
+    .trim();
+  if (!input.endsWith(PATCH_SUFFIX_SR)) {
+    input += "\n" + PATCH_SUFFIX_SR;
+  }
+  log(`Applying SR patch: \`\`\`${input}\`\`\`\n\n`);
+  try {
+    const result = apply_search_replace_patch(
+      input,
+      (p) => fs.readFileSync(resolvePathAgainstWorkdir(p, workdir), "utf8"),
+      (p, c) => {
+        const resolved = resolvePathAgainstWorkdir(p, workdir);
+        const dir = path.dirname(resolved);
+        if (dir !== ".") {
+          fs.mkdirSync(dir, { recursive: true });
+        }
+        fs.writeFileSync(resolved, c, "utf8");
+      },
+    );
+    return { stdout: result, stderr: "", exitCode: 0 };
+  } catch (error: unknown) {
+    const stderr = String((error as any).message ?? error);
+    return { stdout: "", stderr, exitCode: 1 };
   }
 }
 
