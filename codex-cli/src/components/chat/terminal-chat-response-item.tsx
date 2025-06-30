@@ -216,8 +216,14 @@ function TerminalChatResponseToolCallOutput({
   message: ResponseFunctionToolCallOutputItem | any;
   fullStdout: boolean;
 }) {
-  const { output, metadata } = parseToolCallOutput(message.output);
-  const { exit_code, duration_seconds } = metadata;
+  const isContinue = message.output === "continue";
+  const { output, metadata } = isContinue
+    ? { output: "", metadata: {} }
+    : parseToolCallOutput(message.output);
+  const { exit_code, duration_seconds } = metadata as {
+    exit_code?: number;
+    duration_seconds?: number;
+  };
   const metadataInfo = useMemo(
     () =>
       [
@@ -230,6 +236,15 @@ function TerminalChatResponseToolCallOutput({
         .join(", "),
     [exit_code, duration_seconds],
   );
+  if (isContinue) {
+    return (
+      <Box flexDirection="column">
+        <Text color="magentaBright" bold>
+          continue
+        </Text>
+      </Box>
+    );
+  }
   let displayedContent = output;
   if (message.type === "function_call_output" && !fullStdout) {
     const lines = displayedContent.split("\n");
