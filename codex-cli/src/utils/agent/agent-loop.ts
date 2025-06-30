@@ -1721,6 +1721,7 @@ To ensure thorough and robust responses for all queries, follow these guidelines
   - Have I considered edge cases, alternative explanations, or potential gaps in my analysis?
   - Could a follow-up question reveal a weakness in this answer?
   If the answer is not robust, continue investigating until it is comprehensive and defensible.
+- Be as self-sufficient as possible. If you don't know a fact about the codebase, research it yourself using available tools.
 - **Evidence-Based Responses**: Base your answers on concrete evidence from the codebase, such as code snippets, file contents, or tool outputs. Avoid speculation or assumptions about code you have not verified.
 
 ${dynamicPrefix}`;
