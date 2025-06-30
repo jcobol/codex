@@ -177,6 +177,18 @@ function TerminalChatResponseToolCall({
   let workdir: string | undefined;
   let cmdReadableText: string | undefined;
   if (message.type === "function_call") {
+    const name: string | undefined =
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (message as any).function?.name ?? (message as any).name;
+    if (name === "continue") {
+      return (
+        <Box flexDirection="column" gap={1}>
+          <Text color="magentaBright" bold>
+            continue
+          </Text>
+        </Box>
+      );
+    }
     const details = parseToolCall(message);
     workdir = details?.workdir;
     cmdReadableText = details?.cmdReadableText;
@@ -208,6 +220,15 @@ function TerminalChatResponseToolCallOutput({
 }) {
   const { output, metadata } = parseToolCallOutput(message.output);
   const { exit_code, duration_seconds } = metadata;
+  if (output === "continue") {
+    return (
+      <Box flexDirection="column" gap={1}>
+        <Text color="magenta" bold>
+          continue
+        </Text>
+      </Box>
+    );
+  }
   const metadataInfo = useMemo(
     () =>
       [

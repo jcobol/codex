@@ -118,6 +118,14 @@ const localShellTool: Tool = {
   type: "local_shell",
 };
 
+const continueTool: FunctionTool = {
+  type: "function",
+  name: "continue",
+  description:
+    "Indicates that the model wants to continue planning or produce more output in the next response.",
+  parameters: { type: "object", properties: {}, additionalProperties: false },
+};
+
 export class AgentLoop {
   private model: string;
   private provider: string;
@@ -450,7 +458,9 @@ export class AgentLoop {
     const additionalItems: Array<ResponseInputItem> = [];
 
     // TODO: allow arbitrary function calls (beyond shell/container.exec)
-    if (name === "container.exec" || name === "shell") {
+    if (name === "continue") {
+      outputItem.output = "continue";
+    } else if (name === "container.exec" || name === "shell") {
       const {
         outputText,
         metadata,
@@ -637,9 +647,9 @@ export class AgentLoop {
       // `disableResponseStorage === true`.
       let transcriptPrefixLen = 0;
 
-      let tools: Array<Tool> = [shellFunctionTool];
+      let tools: Array<Tool> = [shellFunctionTool, continueTool];
       if (this.model.startsWith("codex")) {
-        tools = [localShellTool];
+        tools = [localShellTool, continueTool];
       }
 
       const stripInternalFields = (

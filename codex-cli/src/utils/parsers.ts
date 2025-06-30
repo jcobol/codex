@@ -15,6 +15,9 @@ export function parseToolCallOutput(toolCallOutput: string): {
   output: string;
   metadata: ExecOutputMetadata;
 } {
+  if (toolCallOutput.trim() === "continue") {
+    return { output: "continue", metadata: { exit_code: 0, duration_seconds: 0 } };
+  }
   try {
     const { output, metadata } = JSON.parse(toolCallOutput);
     return {
