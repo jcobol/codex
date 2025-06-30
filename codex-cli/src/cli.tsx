@@ -29,6 +29,7 @@ import App from "./app";
 import { runSinglePass } from "./cli-singlepass";
 import SessionsOverlay from "./components/sessions-overlay.js";
 import { AgentLoop } from "./utils/agent/agent-loop";
+import { runWorkflow, defaultWorkflow } from "./workflow.js";
 import { ReviewDecision } from "./utils/agent/review";
 import { AutoApprovalMode } from "./utils/auto-approval-mode";
 import { checkForUpdates } from "./utils/check-updates";
@@ -687,7 +688,7 @@ async function runQuietMode({
   });
 
   const inputItem = await createInputItem(prompt, imagePaths);
-  await agent.run([inputItem]);
+  await runWorkflow(defaultWorkflow, agent, [inputItem]);
 }
 
 const exit = () => {
