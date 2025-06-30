@@ -9,6 +9,7 @@ use crate::protocol::Event;
 use crate::protocol::EventMsg;
 use crate::protocol::McpToolCallBeginEvent;
 use crate::protocol::McpToolCallEndEvent;
+use tracing::info;
 
 /// Handles the specified tool call dispatches the appropriate
 /// `McpToolCallBegin` and `McpToolCallEnd` events to the `Session`.
@@ -47,6 +48,7 @@ pub(crate) async fn handle_mcp_tool_call(
         tool: tool_name.clone(),
         arguments: arguments_value.clone(),
     });
+    info!("MCP tool call: {server}.{tool_name}");
     notify_mcp_tool_call_event(sess, sub_id, tool_call_begin_event).await;
 
     // Perform the tool call.

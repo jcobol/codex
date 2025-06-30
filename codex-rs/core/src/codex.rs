@@ -1278,6 +1278,10 @@ async fn handle_container_exec_with_params(
         MaybeApplyPatchVerified::NotApplyPatch => (),
     }
 
+    // Log the command that will be executed so it shows up in the TUI log.
+    let command_str = params.command.join(" ");
+    info!("exec tool call: {command_str}");
+
     // safety checks
     let safety = {
         let state = sess.state.lock().unwrap();
@@ -1512,6 +1516,7 @@ async fn apply_patch(
     call_id: String,
     action: ApplyPatchAction,
 ) -> ResponseInputItem {
+    info!("apply_patch tool call");
     let writable_roots_snapshot = {
         let guard = sess.writable_roots.lock().unwrap();
         guard.clone()
