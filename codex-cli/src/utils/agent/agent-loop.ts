@@ -126,6 +126,14 @@ const localShellTool: Tool = {
   type: "local_shell",
 };
 
+const continueTool: FunctionTool = {
+  type: "function",
+  name: "continue",
+  description: "Request another planning step before responding.",
+  strict: false,
+  parameters: { type: "object", properties: {}, additionalProperties: false },
+};
+
 const lastResponseTool: FunctionTool = {
   type: "function",
   name: "last_response",
@@ -551,6 +559,11 @@ export class AgentLoop {
     // used to tell model to stop if needed
     const additionalItems: Array<ResponseInputItem> = [];
 
+    if (name === "continue") {
+      outputItem.output = "continue";
+      return [outputItem];
+    }
+
     if (name === "last_response") {
       this.stopAfterCurrentTurn = true;
       return [];
@@ -796,9 +809,13 @@ export class AgentLoop {
       // `disableResponseStorage === true`.
       let transcriptPrefixLen = 0;
 
-      let tools: Array<Tool> = [shellFunctionTool, lastResponseTool];
+      let tools: Array<Tool> = [
+        shellFunctionTool,
+        continueTool,
+        lastResponseTool,
+      ];
       if (this.model.startsWith("codex")) {
-        tools = [localShellTool, lastResponseTool];
+        tools = [localShellTool, continueTool, lastResponseTool];
       }
       this.availableTools = tools;
 

@@ -177,6 +177,16 @@ function TerminalChatResponseToolCall({
   let workdir: string | undefined;
   let cmdReadableText: string | undefined;
   if (message.type === "function_call") {
+    const name = (message as any).name ?? (message as any).function?.name;
+    if (name === "continue") {
+      return (
+        <Box flexDirection="column" gap={1}>
+          <Text color="magentaBright" bold>
+            continue
+          </Text>
+        </Box>
+      );
+    }
     const details = parseToolCall(message);
     workdir = details?.workdir;
     cmdReadableText = details?.cmdReadableText;
