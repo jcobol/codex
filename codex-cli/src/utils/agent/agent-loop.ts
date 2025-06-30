@@ -126,6 +126,14 @@ const localShellTool: Tool = {
   type: "local_shell",
 };
 
+const continueTool: FunctionTool = {
+  type: "function",
+  name: "continue",
+  description: "Request another planning step before responding.",
+  strict: false,
+  parameters: { type: "object", properties: {}, additionalProperties: false },
+};
+
 const lastResponseTool: FunctionTool = {
   type: "function",
   name: "last_response",
@@ -551,6 +559,11 @@ export class AgentLoop {
     // used to tell model to stop if needed
     const additionalItems: Array<ResponseInputItem> = [];
 
+    if (name === "continue") {
+      outputItem.output = "continue";
+      return [outputItem];
+    }
+
     if (name === "last_response") {
       this.stopAfterCurrentTurn = true;
       return [];
@@ -796,9 +809,13 @@ export class AgentLoop {
       // `disableResponseStorage === true`.
       let transcriptPrefixLen = 0;
 
-      let tools: Array<Tool> = [shellFunctionTool, lastResponseTool];
+      let tools: Array<Tool> = [
+        shellFunctionTool,
+        continueTool,
+        lastResponseTool,
+      ];
       if (this.model.startsWith("codex")) {
-        tools = [localShellTool, lastResponseTool];
+        tools = [localShellTool, continueTool, lastResponseTool];
       }
       this.availableTools = tools;
 
@@ -1719,6 +1736,7 @@ You MUST adhere to the following criteria when executing the task:
 - Analyzing code for vulnerabilities is allowed.
 - Showing user code and tool call details is allowed.
 - Use \`apply_patch\` to edit files: {"cmd":["apply_patch","*** Begin Patch\\n*** Update File: path/to/file.py\\n@@ def example():\\n-  pass\\n+  return 123\\n*** End Patch"]}
+- To request more planning, call \`continue\`: {"cmd":["continue"]}
 - To end your turn early, call \`last_response\`: {"cmd":["last_response"]}
 - If completing the user’s task requires writing or modifying files:
     - Your code and final answer should follow these *CODING GUIDELINES*:
