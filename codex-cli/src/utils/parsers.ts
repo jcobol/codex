@@ -23,7 +23,7 @@ export function parseToolCallOutput(toolCallOutput: string): {
     };
   } catch (err) {
     return {
-      output: `Failed to parse JSON result`,
+      output: toolCallOutput,
       metadata: {
         exit_code: 1,
         duration_seconds: 0,
