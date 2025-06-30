@@ -165,6 +165,8 @@ export class AgentLoop {
     analysis?: string;
     file_structure?: string;
   };
+  /** Tools advertised to the model for the current run. */
+  private availableTools: Array<Tool> = [];
 
   /**
    * A reference to the currently active stream returned from the OpenAI
@@ -521,21 +523,11 @@ export class AgentLoop {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const callId: string = (item as any).call_id ?? (item as any).id;
 
-    const args = parseToolCallArguments(rawArguments ?? "{}");
     log(
       `handleFunctionCall(): name=${
         name ?? "undefined"
       } callId=${callId} args=${rawArguments}`,
     );
-
-    if (args == null) {
-      const outputItem: ResponseInputItem.FunctionCallOutput = {
-        type: "function_call_output",
-        call_id: item.call_id,
-        output: `invalid arguments: ${rawArguments}`,
-      };
-      return [outputItem];
-    }
 
     const outputItem: ResponseInputItem.FunctionCallOutput = {
       type: "function_call_output",
@@ -564,8 +556,18 @@ export class AgentLoop {
       return [];
     }
 
-    // TODO: allow arbitrary function calls (beyond shell/container.exec)
+    // dispatch built-in shell tools directly, everything else is handled via a
+    // generic fallback so that custom tools specified in `tools` work as well
     if (name === "container.exec" || name === "shell") {
+      const args = parseToolCallArguments(rawArguments ?? "{}");
+      if (args == null) {
+        const invalid: ResponseInputItem.FunctionCallOutput = {
+          type: "function_call_output",
+          call_id: callId,
+          output: `invalid arguments: ${rawArguments}`,
+        };
+        return [invalid];
+      }
       const {
         outputText,
         metadata,
@@ -591,9 +593,42 @@ export class AgentLoop {
       if (additionalItemsFromExec) {
         additionalItems.push(...additionalItemsFromExec);
       }
+    } else {
+      let parsedArgs: Record<string, unknown> = {};
+      try {
+        parsedArgs = rawArguments ? JSON.parse(rawArguments) : {};
+      } catch {
+        parsedArgs = {};
+      }
+
+      const {
+        outputText,
+        metadata = {},
+        additionalItems: genericAdditional,
+      } = await this.handleGenericToolCall(name ?? "", parsedArgs);
+      outputItem.output = JSON.stringify({ output: outputText, metadata });
+      if (genericAdditional) {
+        additionalItems.push(...genericAdditional);
+      }
     }
 
     return [outputItem, ...additionalItems];
+  }
+
+  /**
+   * Generic handler for non-shell function tools. The default implementation
+   * simply echoes the call name and arguments back to the model. Tests can
+   * spy on this method to verify dispatch behaviour.
+   */
+  protected async handleGenericToolCall(
+    name: string,
+    _args: Record<string, unknown>,
+  ): Promise<{
+    outputText: string;
+    metadata?: Record<string, unknown>;
+    additionalItems?: Array<ResponseInputItem>;
+  }> {
+    return { outputText: name };
   }
 
   private async handleLocalShellCall(
@@ -765,6 +800,7 @@ export class AgentLoop {
       if (this.model.startsWith("codex")) {
         tools = [localShellTool, lastResponseTool];
       }
+      this.availableTools = tools;
 
       const stripInternalFields = this.stripInternalFields.bind(this);
 
