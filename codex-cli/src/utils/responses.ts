@@ -213,12 +213,15 @@ function convertInputItemToMessage(
   } else if (
     responseItem.type === "function_call_output" ||
     // local_shell_call_output has the same structure as function_call_output
-    responseItem.type === "local_shell_call_output"
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (responseItem as any).type === "local_shell_call_output"
   ) {
     return {
       role: "tool",
-      tool_call_id: responseItem.call_id,
-      content: responseItem.output,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      tool_call_id: (responseItem as any).call_id,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      content: (responseItem as any).output,
     };
   }
   throw new Error(`Unsupported input item type: ${responseItem.type}`);

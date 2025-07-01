@@ -5,7 +5,7 @@ import type {
 import type { ResponseFunctionToolCall } from "openai/resources/responses/responses.mjs";
 
 import { log } from "node:console";
-import { formatCommandForDisplay } from "src/format-command.js";
+import { formatCommandForDisplay } from "../format-command.js";
 
 // The console utility import is intentionally explicit to avoid bundlers from
 // including the entire `console` module when only the `log` function is
@@ -126,17 +126,20 @@ export function parseApplyPatchArguments(
   }
   const obj = json as Record<string, unknown>;
   let patch: string | undefined;
-  if (typeof obj.patch === "string") {
-    patch = obj.patch;
-  } else if (Array.isArray(obj.cmd) && obj.cmd.length === 1) {
-    const first = obj.cmd[0];
-    if (typeof first === "string") patch = first;
-  } else if (typeof obj.cmd === "string") {
-    patch = obj.cmd;
+  if (typeof obj["patch"] === "string") {
+    patch = obj["patch"] as string;
+  } else if (Array.isArray(obj["cmd"]) && obj["cmd"].length === 1) {
+    const first = (obj["cmd"] as Array<unknown>)[0];
+    if (typeof first === "string") {
+      patch = first;
+    }
+  } else if (typeof obj["cmd"] === "string") {
+    patch = obj["cmd"] as string;
   }
   if (typeof patch !== "string") {
     return undefined;
   }
-  const workdir = typeof obj.workdir === "string" ? obj.workdir : undefined;
+  const workdir =
+    typeof obj["workdir"] === "string" ? (obj["workdir"] as string) : undefined;
   return { patch, workdir };
 }

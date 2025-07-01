@@ -615,7 +615,11 @@ export class AgentLoop {
         };
         return [invalid];
       }
-      const execArgs = { cmd: ["apply_patch", args.patch], workdir: args.workdir };
+      const execArgs = {
+        cmd: ["apply_patch", args.patch],
+        workdir: args.workdir,
+        timeoutInMillis: undefined,
+      };
       const { outputText, metadata, additionalItems: additionalItemsFromExec } =
         await handleExecCommand(
           execArgs,
@@ -1689,15 +1693,18 @@ export class AgentLoop {
     let depth = 0;
     for (let i = start; i < trimmed.length; i++) {
       const ch = trimmed[i];
-      if (ch === "{") depth += 1;
-      else if (ch === "}") {
+      if (ch === "{") {
+        depth += 1;
+      } else if (ch === "}") {
         depth -= 1;
         if (depth === 0) {
           const candidate = trimmed.slice(start, i + 1);
           try {
             const obj = JSON.parse(candidate);
             const args = parseToolCallArguments(JSON.stringify(obj));
-            if (!args) return null;
+            if (!args) {
+              return null;
+            }
             return {
               type: "local_shell_call",
               id: randomUUID(),
@@ -1766,12 +1773,14 @@ export class AgentLoop {
           const text = (parts[0].text || "").trim();
           const parsed = this.parseTextToolCall(text);
           if (parsed) {
-            // eslint-disable-next-line no-await-in-loop
-            if (parsed.type === "local_shell_call") {
-              const result = await this.handleLocalShellCall(parsed);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            if ((parsed as any).type === "local_shell_call") {
+              // eslint-disable-next-line no-await-in-loop, @typescript-eslint/no-explicit-any
+              const result = await this.handleLocalShellCall(parsed as any);
               turnInput.push(...result);
             } else {
-              const result = await this.handleFunctionCall(parsed);
+              // eslint-disable-next-line no-await-in-loop, @typescript-eslint/no-explicit-any
+              const result = await this.handleFunctionCall(parsed as any);
               turnInput.push(...result);
             }
             continue;

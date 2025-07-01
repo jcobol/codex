@@ -1,4 +1,36 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+
+vi.mock("openai", () => {
+  class FakeOpenAI {
+    public responses = {
+      create: () => ({
+        controller: { abort: vi.fn() },
+        async *[Symbol.asyncIterator]() {}
+      }),
+    };
+  }
+  class APIConnectionTimeoutError extends Error {}
+  return { __esModule: true, default: FakeOpenAI, APIConnectionTimeoutError };
+});
+
+vi.mock("../src/approvals.js", () => ({
+  __esModule: true,
+  alwaysApprovedCommands: new Set<string>(),
+  canAutoApprove: () => ({ type: "auto-approve", runInSandbox: false }) as any,
+  isSafeCommand: () => null,
+}));
+
+vi.mock("../src/format-command.js", () => ({
+  __esModule: true,
+  formatCommandForDisplay: (c: Array<string>) => c.join(" "),
+}));
+
+vi.mock("../src/utils/agent/log.js", () => ({
+  __esModule: true,
+  log: () => {},
+  isLoggingEnabled: () => false,
+}));
+
 import { AgentLoop } from "../src/utils/agent/agent-loop.js";
 
 function createAgent() {
