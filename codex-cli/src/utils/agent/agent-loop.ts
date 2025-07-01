@@ -21,7 +21,7 @@ import {
   AZURE_OPENAI_API_VERSION,
 } from "../config.js";
 import { log } from "../logger/log.js";
-import { parseToolCallArguments } from "../parsers.js";
+import { parseToolCallArguments, parseApplyPatchArguments } from "../parsers.js";
 import { getEnvironmentInfo } from "../platform-info.js";
 import { responsesCreateViaChatCompletions } from "../responses.js";
 import {
@@ -602,6 +602,30 @@ export class AgentLoop {
         this.jsonResponse.file_structure = outputText;
       }
 
+      if (additionalItemsFromExec) {
+        additionalItems.push(...additionalItemsFromExec);
+      }
+    } else if (name === "apply_patch") {
+      const args = parseApplyPatchArguments(rawArguments ?? "{}");
+      if (args == null) {
+        const invalid: ResponseInputItem.FunctionCallOutput = {
+          type: "function_call_output",
+          call_id: callId,
+          output: `invalid arguments: ${rawArguments}`,
+        };
+        return [invalid];
+      }
+      const execArgs = { cmd: ["apply_patch", args.patch], workdir: args.workdir };
+      const { outputText, metadata, additionalItems: additionalItemsFromExec } =
+        await handleExecCommand(
+          execArgs,
+          this.config,
+          this.approvalPolicy,
+          this.additionalWritableRoots,
+          this.getCommandConfirmation,
+          this.execAbortController?.signal,
+        );
+      outputItem.output = JSON.stringify({ output: outputText, metadata });
       if (additionalItemsFromExec) {
         additionalItems.push(...additionalItemsFromExec);
       }

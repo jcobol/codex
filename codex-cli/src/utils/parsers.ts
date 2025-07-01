@@ -111,3 +111,32 @@ function toStringArray(obj: unknown): Array<string> | undefined {
     return undefined;
   }
 }
+
+export function parseApplyPatchArguments(
+  toolCallArguments: string,
+): { patch: string; workdir?: string } | undefined {
+  let json: unknown;
+  try {
+    json = JSON.parse(toolCallArguments);
+  } catch {
+    return undefined;
+  }
+  if (typeof json !== "object" || json == null) {
+    return undefined;
+  }
+  const obj = json as Record<string, unknown>;
+  let patch: string | undefined;
+  if (typeof obj.patch === "string") {
+    patch = obj.patch;
+  } else if (Array.isArray(obj.cmd) && obj.cmd.length === 1) {
+    const first = obj.cmd[0];
+    if (typeof first === "string") patch = first;
+  } else if (typeof obj.cmd === "string") {
+    patch = obj.cmd;
+  }
+  if (typeof patch !== "string") {
+    return undefined;
+  }
+  const workdir = typeof obj.workdir === "string" ? obj.workdir : undefined;
+  return { patch, workdir };
+}
