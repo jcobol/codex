@@ -20,7 +20,6 @@ export async function runWorkflow(
 ): Promise<void> {
   const lastId = previousResponseId;
   for (const phase of workflow) {
-    // eslint-disable-next-line no-await-in-loop -- workflow phases run sequentially
     await phase.run(agent, input, lastId);
   }
 }

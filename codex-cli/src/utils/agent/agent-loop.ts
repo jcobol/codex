@@ -1657,30 +1657,42 @@ export class AgentLoop {
   }
 
   private parseTextToolCall(text: string): ResponseItem | null {
-    try {
-      const obj = JSON.parse(text.trim());
-      if (typeof obj !== "object" || obj == null) {
-        return null;
-      }
-      const args = parseToolCallArguments(JSON.stringify(obj));
-      if (!args) {
-        return null;
-      }
-      return {
-        type: "local_shell_call",
-        id: randomUUID(),
-        status: "completed",
-        call_id: randomUUID(),
-        action: {
-          type: "exec",
-          command: args.cmd,
-          working_directory: args.workdir,
-          timeout_ms: args.timeoutInMillis,
-        },
-      } as unknown as ResponseItem;
-    } catch {
+    const trimmed = text.trim();
+    const start = trimmed.indexOf("{");
+    if (start === -1) {
       return null;
     }
+    let depth = 0;
+    for (let i = start; i < trimmed.length; i++) {
+      const ch = trimmed[i];
+      if (ch === "{") depth += 1;
+      else if (ch === "}") {
+        depth -= 1;
+        if (depth === 0) {
+          const candidate = trimmed.slice(start, i + 1);
+          try {
+            const obj = JSON.parse(candidate);
+            const args = parseToolCallArguments(JSON.stringify(obj));
+            if (!args) return null;
+            return {
+              type: "local_shell_call",
+              id: randomUUID(),
+              status: "completed",
+              call_id: randomUUID(),
+              action: {
+                type: "exec",
+                command: args.cmd,
+                working_directory: args.workdir,
+                timeout_ms: args.timeoutInMillis,
+              },
+            } as unknown as ResponseItem;
+          } catch {
+            return null;
+          }
+        }
+      }
+    }
+    return null;
   }
 
   // we need until we can depend on streaming events
