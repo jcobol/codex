@@ -173,8 +173,6 @@ export class AgentLoop {
     analysis?: string;
     file_structure?: string;
   };
-  /** Tools advertised to the model for the current run. */
-  private availableTools: Array<Tool> = [];
 
   /**
    * A reference to the currently active stream returned from the OpenAI
@@ -598,6 +596,7 @@ export class AgentLoop {
       if (
         this.jsonResponse &&
         Array.isArray(args.cmd) &&
+        args.cmd[0] &&
         ["ls", "find"].includes(args.cmd[0])
       ) {
         this.jsonResponse.file_structure = outputText;
@@ -817,7 +816,6 @@ export class AgentLoop {
       if (this.model.startsWith("codex")) {
         tools = [localShellTool, continueTool, lastResponseTool];
       }
-      this.availableTools = tools;
 
       const stripInternalFields = this.stripInternalFields.bind(this);
 
@@ -1658,6 +1656,36 @@ export class AgentLoop {
     }
   }
 
+  private parseTextToolCall(text: string): ResponseFunctionToolCall | null {
+    try {
+      const obj = JSON.parse(text.trim());
+      if (typeof obj !== "object" || obj == null) {
+        return null;
+      }
+      const rawCmd =
+        (obj as Record<string, unknown>)["cmd"] ??
+        (obj as Record<string, unknown>)["command"];
+      const cmdArray = Array.isArray(rawCmd)
+        ? rawCmd
+        : typeof rawCmd === "string"
+          ? [rawCmd]
+          : null;
+      if (!cmdArray || cmdArray.length === 0) {
+        return null;
+      }
+      return {
+        type: "function_call",
+        id: randomUUID(),
+        status: "completed",
+        call_id: randomUUID(),
+        name: String(cmdArray[0]),
+        arguments: JSON.stringify(obj),
+      } as ResponseFunctionToolCall;
+    } catch {
+      return null;
+    }
+  }
+
   // we need until we can depend on streaming events
   private async processEventsWithoutStreaming(
     output: Array<ResponseInputItem>,
@@ -1691,6 +1719,26 @@ export class AgentLoop {
         // eslint-disable-next-line no-await-in-loop
         const result = await this.handleLocalShellCall(item);
         turnInput.push(...result);
+      } else if (
+        item.type === "message" &&
+        (item as { role?: string }).role === "assistant"
+      ) {
+        const parts = (item as { content?: Array<{ type?: string; text?: string }> }).content;
+        if (
+          Array.isArray(parts) &&
+          parts.length === 1 &&
+          parts[0] &&
+          parts[0].type === "output_text"
+        ) {
+          const text = (parts[0].text || "").trim();
+          const parsed = this.parseTextToolCall(text);
+          if (parsed) {
+            // eslint-disable-next-line no-await-in-loop
+            const result = await this.handleFunctionCall(parsed);
+            turnInput.push(...result);
+            continue;
+          }
+        }
       }
       emitItem(item as ResponseItem);
     }
