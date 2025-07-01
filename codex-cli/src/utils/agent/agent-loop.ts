@@ -1656,31 +1656,28 @@ export class AgentLoop {
     }
   }
 
-  private parseTextToolCall(text: string): ResponseFunctionToolCall | null {
+  private parseTextToolCall(text: string): ResponseItem | null {
     try {
       const obj = JSON.parse(text.trim());
       if (typeof obj !== "object" || obj == null) {
         return null;
       }
-      const rawCmd =
-        (obj as Record<string, unknown>)["cmd"] ??
-        (obj as Record<string, unknown>)["command"];
-      const cmdArray = Array.isArray(rawCmd)
-        ? rawCmd
-        : typeof rawCmd === "string"
-          ? [rawCmd]
-          : null;
-      if (!cmdArray || cmdArray.length === 0) {
+      const args = parseToolCallArguments(JSON.stringify(obj));
+      if (!args) {
         return null;
       }
       return {
-        type: "function_call",
+        type: "local_shell_call",
         id: randomUUID(),
         status: "completed",
         call_id: randomUUID(),
-        name: String(cmdArray[0]),
-        arguments: JSON.stringify(obj),
-      } as ResponseFunctionToolCall;
+        action: {
+          type: "exec",
+          command: args.cmd,
+          working_directory: args.workdir,
+          timeout_ms: args.timeoutInMillis,
+        },
+      } as unknown as ResponseItem;
     } catch {
       return null;
     }
@@ -1734,8 +1731,13 @@ export class AgentLoop {
           const parsed = this.parseTextToolCall(text);
           if (parsed) {
             // eslint-disable-next-line no-await-in-loop
-            const result = await this.handleFunctionCall(parsed);
-            turnInput.push(...result);
+            if (parsed.type === "local_shell_call") {
+              const result = await this.handleLocalShellCall(parsed);
+              turnInput.push(...result);
+            } else {
+              const result = await this.handleFunctionCall(parsed);
+              turnInput.push(...result);
+            }
             continue;
           }
         }
