@@ -210,7 +210,11 @@ function convertInputItemToMessage(
           .join("")
       : "";
     return { role: responseItem.role, content };
-  } else if (responseItem.type === "function_call_output") {
+  } else if (
+    responseItem.type === "function_call_output" ||
+    // local_shell_call_output has the same structure as function_call_output
+    responseItem.type === "local_shell_call_output"
+  ) {
     return {
       role: "tool",
       tool_call_id: responseItem.call_id,
