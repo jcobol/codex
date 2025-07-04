@@ -1744,6 +1744,27 @@ export class AgentLoop {
               },
             } as unknown as ResponseItem;
           } catch {
+            // attempt to parse malformed apply_patch calls like
+            // {"name": "apply_patch", "parameters": {*** Begin Patch...}}
+            if (trimmed.includes('"name": "apply_patch"')) {
+              const startIdx = trimmed.indexOf('*** Begin Patch');
+              const endIdx = trimmed.indexOf('*** End Patch');
+              if (startIdx !== -1 && endIdx !== -1) {
+                const patch = trimmed.slice(startIdx, endIdx + '*** End Patch'.length);
+                return {
+                  type: "local_shell_call",
+                  id: randomUUID(),
+                  status: "completed",
+                  call_id: randomUUID(),
+                  action: {
+                    type: "exec",
+                    command: ["apply_patch", patch],
+                    working_directory: undefined,
+                    timeout_ms: undefined,
+                  },
+                } as unknown as ResponseItem;
+              }
+            }
             return null;
           }
         }
