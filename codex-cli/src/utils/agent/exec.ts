@@ -143,11 +143,12 @@ export function execApplyPatch(
 function adjustPatchForMissingFiles(patch: string, workdir?: string): string {
   const lines = patch.split("\n");
   for (let i = 0; i < lines.length; i++) {
-    if (lines[i].startsWith(UPDATE_FILE_PREFIX)) {
-      const path = lines[i].slice(UPDATE_FILE_PREFIX.length).trim();
-      const resolved = resolvePathAgainstWorkdir(path, workdir);
+    const line = lines[i]!;
+    if (line.startsWith(UPDATE_FILE_PREFIX)) {
+      const targetPath = line.slice(UPDATE_FILE_PREFIX.length).trim();
+      const resolved = resolvePathAgainstWorkdir(targetPath, workdir);
       if (!fs.existsSync(resolved)) {
-        lines[i] = `${ADD_FILE_PREFIX}${path}`;
+        lines[i] = `${ADD_FILE_PREFIX}${targetPath}`;
       }
     }
   }

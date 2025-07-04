@@ -1700,17 +1700,19 @@ export class AgentLoop {
         if (depth === 0) {
           const candidate = trimmed.slice(start, i + 1);
           try {
-            const obj = JSON.parse(candidate);
-            if (obj && typeof obj === "object" && "name" in obj) {
-              const name = (obj as any).name;
-              const params = (obj as any).parameters ?? {};
+            const obj = JSON.parse(candidate) as {
+              name?: string;
+              parameters?: unknown;
+            };
+            if (obj && typeof obj === "object" && obj.name) {
+              const { name, parameters: params = {} } = obj;
               if (name === "apply_patch") {
                 const args = parseApplyPatchArguments(JSON.stringify(params));
                 if (!args) {
                   return null;
                 }
                 return {
-                  //@ts-expect-error - waiting on sdk
+                  // Treated as ResponseItem until SDK adds explicit type
                   type: "local_shell_call",
                   id: randomUUID(),
                   status: "completed",
@@ -1729,7 +1731,7 @@ export class AgentLoop {
               return null;
             }
             return {
-              //@ts-expect-error - waiting on sdk
+              // Treated as ResponseItem until SDK adds explicit type
               type: "local_shell_call",
               id: randomUUID(),
               status: "completed",

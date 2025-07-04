@@ -67,7 +67,7 @@ describe("parseTextToolCall", () => {
     });
     const parsed = (agent as any).parseTextToolCall(text);
     expect(parsed).toMatchObject({
-      //@ts-expect-error - waiting on sdk
+      // Parsed as a local shell call
       type: "local_shell_call",
       action: { command: ["apply_patch", patch] },
     });
