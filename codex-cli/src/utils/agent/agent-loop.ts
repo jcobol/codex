@@ -1701,11 +1701,35 @@ export class AgentLoop {
           const candidate = trimmed.slice(start, i + 1);
           try {
             const obj = JSON.parse(candidate);
+            if (obj && typeof obj === "object" && "name" in obj) {
+              const name = (obj as any).name;
+              const params = (obj as any).parameters ?? {};
+              if (name === "apply_patch") {
+                const args = parseApplyPatchArguments(JSON.stringify(params));
+                if (!args) {
+                  return null;
+                }
+                return {
+                  //@ts-expect-error - waiting on sdk
+                  type: "local_shell_call",
+                  id: randomUUID(),
+                  status: "completed",
+                  call_id: randomUUID(),
+                  action: {
+                    type: "exec",
+                    command: ["apply_patch", args.patch],
+                    working_directory: args.workdir,
+                    timeout_ms: undefined,
+                  },
+                } as unknown as ResponseItem;
+              }
+            }
             const args = parseToolCallArguments(JSON.stringify(obj));
             if (!args) {
               return null;
             }
             return {
+              //@ts-expect-error - waiting on sdk
               type: "local_shell_call",
               id: randomUUID(),
               status: "completed",

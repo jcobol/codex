@@ -128,6 +128,10 @@ export function parseApplyPatchArguments(
   let patch: string | undefined;
   if (typeof obj["patch"] === "string") {
     patch = obj["patch"] as string;
+  } else if (typeof obj["body"] === "string") {
+    patch = obj["body"] as string;
+  } else if (typeof obj["*body"] === "string") {
+    patch = obj["*body"] as string;
   } else if (Array.isArray(obj["cmd"])) {
     const arr = (obj["cmd"] as Array<unknown>).filter(
       (v) => typeof v === "string",

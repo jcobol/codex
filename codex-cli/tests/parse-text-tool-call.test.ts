@@ -57,4 +57,19 @@ describe("parseTextToolCall", () => {
       action: { command: ["echo", "hi"] },
     });
   });
+
+  it("parses apply_patch json format", () => {
+    const agent = createAgent();
+    const patch = "*** Begin Patch\n*** Update File: foo\n+hi\n*** End Patch";
+    const text = JSON.stringify({
+      name: "apply_patch",
+      parameters: { patch },
+    });
+    const parsed = (agent as any).parseTextToolCall(text);
+    expect(parsed).toMatchObject({
+      //@ts-expect-error - waiting on sdk
+      type: "local_shell_call",
+      action: { command: ["apply_patch", patch] },
+    });
+  });
 });

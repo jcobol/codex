@@ -16,4 +16,12 @@ describe("parseApplyPatchArguments", () => {
     }));
     expect(args).toEqual({ patch, workdir: "/tmp" });
   });
+
+  it("handles body fields", () => {
+    const patch = "*** Begin Patch\n*** Add File: foo\n+hi\n*** End Patch";
+    const args1 = parseApplyPatchArguments(JSON.stringify({ body: patch }));
+    expect(args1).toEqual({ patch, workdir: undefined });
+    const args2 = parseApplyPatchArguments(JSON.stringify({ "*body": patch }));
+    expect(args2).toEqual({ patch, workdir: undefined });
+  });
 });
