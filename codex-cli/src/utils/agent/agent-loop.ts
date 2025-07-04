@@ -1686,87 +1686,60 @@ export class AgentLoop {
 
   private parseTextToolCall(text: string): ResponseItem | null {
     const trimmed = text.trim();
-    const start = trimmed.indexOf("{");
-    if (start === -1) {
-      return null;
-    }
-    let depth = 0;
-    for (let i = start; i < trimmed.length; i++) {
-      const ch = trimmed[i];
-      if (ch === "{") {
-        depth += 1;
-      } else if (ch === "}") {
-        depth -= 1;
-        if (depth === 0) {
-          const candidate = trimmed.slice(start, i + 1);
-          try {
-            const obj = JSON.parse(candidate) as {
-              name?: string;
-              parameters?: unknown;
-            };
-            if (obj && typeof obj === "object" && obj.name) {
-              const { name, parameters: params = {} } = obj;
-              if (name === "apply_patch") {
-                const args = parseApplyPatchArguments(JSON.stringify(params));
-                if (!args) {
-                  return null;
-                }
-                return {
-                  // Treated as ResponseItem until SDK adds explicit type
-                  type: "local_shell_call",
-                  id: randomUUID(),
-                  status: "completed",
-                  call_id: randomUUID(),
-                  action: {
-                    type: "exec",
-                    command: ["apply_patch", args.patch],
-                    working_directory: args.workdir,
-                    timeout_ms: undefined,
-                  },
-                } as unknown as ResponseItem;
-              }
-            }
-            const args = parseToolCallArguments(JSON.stringify(obj));
-            if (!args) {
-              return null;
-            }
-            return {
-              // Treated as ResponseItem until SDK adds explicit type
-              type: "local_shell_call",
-              id: randomUUID(),
-              status: "completed",
-              call_id: randomUUID(),
-              action: {
-                type: "exec",
-                command: args.cmd,
-                working_directory: args.workdir,
-                timeout_ms: args.timeoutInMillis,
-              },
-            } as unknown as ResponseItem;
-          } catch {
-            // attempt to parse malformed apply_patch calls like
-            // {"name": "apply_patch", "parameters": {*** Begin Patch...}}
-            if (trimmed.includes('"name": "apply_patch"')) {
-              const startIdx = trimmed.indexOf('*** Begin Patch');
-              const endIdx = trimmed.indexOf('*** End Patch');
-              if (startIdx !== -1 && endIdx !== -1) {
-                const patch = trimmed.slice(startIdx, endIdx + '*** End Patch'.length);
-                return {
-                  type: "local_shell_call",
-                  id: randomUUID(),
-                  status: "completed",
-                  call_id: randomUUID(),
-                  action: {
-                    type: "exec",
-                    command: ["apply_patch", patch],
-                    working_directory: undefined,
-                    timeout_ms: undefined,
-                  },
-                } as unknown as ResponseItem;
-              }
-            }
-            return null;
-          }
+    const match = trimmed.match(/\{[\s\S]*?\}/);
+    if (!match) return null;
+    try {
+      const obj = JSON.parse(match[0]) as Record<string, unknown>;
+      if (obj && typeof obj === "object") {
+        if (obj.name === "apply_patch") {
+          const args = parseApplyPatchArguments(JSON.stringify(obj.parameters ?? {}));
+          if (!args) return null;
+          return {
+            type: "local_shell_call" as any,
+            id: randomUUID(),
+            status: "completed",
+            call_id: randomUUID(),
+            action: {
+              type: "exec",
+              command: ["apply_patch", args.patch],
+              working_directory: args.workdir,
+              timeout_ms: undefined,
+            },
+          } as unknown as ResponseItem;
+        }
+        const args = parseToolCallArguments(JSON.stringify(obj));
+        if (!args) return null;
+        return {
+          type: "local_shell_call" as any,
+          id: randomUUID(),
+          status: "completed",
+          call_id: randomUUID(),
+          action: {
+            type: "exec",
+            command: args.cmd,
+            working_directory: args.workdir,
+            timeout_ms: args.timeoutInMillis,
+          },
+        } as unknown as ResponseItem;
+      }
+    } catch {
+      if (trimmed.includes('"name": "apply_patch"')) {
+        const startIdx = trimmed.indexOf('*** Begin Patch');
+        const endIdx = trimmed.indexOf('*** End Patch');
+        if (startIdx !== -1 && endIdx !== -1) {
+          const patch = trimmed.slice(startIdx, endIdx + '*** End Patch'.length);
+          return {
+            type: "local_shell_call" as any,
+            id: randomUUID(),
+            status: "completed",
+            call_id: randomUUID(),
+            action: {
+              type: "exec",
+              command: ["apply_patch", patch],
+              working_directory: undefined,
+              timeout_ms: undefined,
+            },
+          } as unknown as ResponseItem;
         }
       }
     }
