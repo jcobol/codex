@@ -128,10 +128,14 @@ export function parseApplyPatchArguments(
   let patch: string | undefined;
   if (typeof obj["patch"] === "string") {
     patch = obj["patch"] as string;
-  } else if (Array.isArray(obj["cmd"]) && obj["cmd"].length === 1) {
-    const first = (obj["cmd"] as Array<unknown>)[0];
-    if (typeof first === "string") {
-      patch = first;
+  } else if (Array.isArray(obj["cmd"])) {
+    const arr = (obj["cmd"] as Array<unknown>).filter(
+      (v) => typeof v === "string",
+    ) as Array<string>;
+    if (arr.length === 1) {
+      patch = arr[0];
+    } else if (arr.length >= 2 && arr[0] === "apply_patch") {
+      patch = arr.slice(1).join("\n");
     }
   } else if (typeof obj["cmd"] === "string") {
     patch = obj["cmd"] as string;
