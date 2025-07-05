@@ -1868,6 +1868,9 @@ You MUST adhere to the following criteria when executing the task:
 - Analyzing code for vulnerabilities is allowed.
 - Showing user code and tool call details is allowed.
 - Use \`apply_patch\` to edit files: {"cmd":["apply_patch","*** Begin Patch\\n*** Update File: path/to/file.py\\n@@ def example():\\n-  pass\\n+  return 123\\n*** End Patch"]}
+  The patch must begin with \`*** Begin Patch\` and end with \`*** End Patch\`. Use \`*** Update File:\` or \`*** Add File:\` lines for each file. Provide hunks with @@ context.
+  Example:
+  {"cmd":["apply_patch","*** Begin Patch\\n*** Update File: hello.py\\n@@\\n+print('Hello World')\\n*** End Patch"]}
 - To follow up with additional planning or actions in your next response, call \`continue\`: {"cmd":["continue"]}
 - To end your turn early, call \`last_response\`: {"cmd":["last_response"]}
 - If completing the user’s task requires writing or modifying files:
