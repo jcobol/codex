@@ -94,6 +94,8 @@ export function execApplyPatch(
     .replace(/\*\*\* End Patch\nEOF('|")?/, "*** End Patch")
     .trim();
 
+  applyPatchInput = stripHunkHeaders(applyPatchInput);
+
   // If the patch tries to update a file that doesn't exist, convert it to an
   // add operation so the patch succeeds.
   applyPatchInput = adjustPatchForMissingFiles(applyPatchInput, workdir);
@@ -153,6 +155,13 @@ function adjustPatchForMissingFiles(patch: string, workdir?: string): string {
     }
   }
   return lines.join("\n");
+}
+
+function stripHunkHeaders(patch: string): string {
+  return patch
+    .split("\n")
+    .filter((line) => !line.trim().startsWith("@@"))
+    .join("\n");
 }
 
 export function getBaseCmd(cmd: Array<string>): string {
