@@ -42,3 +42,26 @@ test("execApplyPatch creates missing directories when adding a file", () => {
   // Cleanup to keep tmpdir tidy.
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
+
+test("execApplyPatch handles hunk headers", () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "apply-patch-test-"));
+  const fileRel = "hello.txt";
+  const fileAbs = path.join(tmpDir, fileRel);
+
+  const patch =
+    "*** Begin Patch\n*** Update File: hello.txt\n@@ -0,0 +1 @@\n+hi\n*** End Patch";
+
+  const prev = process.cwd();
+  try {
+    process.chdir(tmpDir);
+    const result = execApplyPatch(patch);
+    expect(result.exitCode).toBe(0);
+  } finally {
+    process.chdir(prev);
+  }
+
+  const content = fs.readFileSync(fileAbs, "utf8");
+  expect(content).toBe("hi");
+
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+});

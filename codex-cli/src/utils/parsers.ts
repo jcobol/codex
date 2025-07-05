@@ -5,7 +5,7 @@ import type {
 import type { ResponseFunctionToolCall } from "openai/resources/responses/responses.mjs";
 
 import { log } from "node:console";
-import { formatCommandForDisplay } from "src/format-command.js";
+import { formatCommandForDisplay } from "../format-command.js";
 
 // The console utility import is intentionally explicit to avoid bundlers from
 // including the entire `console` module when only the `log` function is
@@ -110,4 +110,44 @@ function toStringArray(obj: unknown): Array<string> | undefined {
   } else {
     return undefined;
   }
+}
+
+export function parseApplyPatchArguments(
+  toolCallArguments: string,
+): { patch: string; workdir?: string } | undefined {
+  let json: unknown;
+  try {
+    json = JSON.parse(toolCallArguments);
+  } catch {
+    return undefined;
+  }
+  if (typeof json !== "object" || json == null) {
+    return undefined;
+  }
+  const obj = json as Record<string, unknown>;
+  let patch: string | undefined;
+  if (typeof obj["patch"] === "string") {
+    patch = obj["patch"] as string;
+  } else if (typeof obj["body"] === "string") {
+    patch = obj["body"] as string;
+  } else if (typeof obj["*body"] === "string") {
+    patch = obj["*body"] as string;
+  } else if (Array.isArray(obj["cmd"])) {
+    const arr = (obj["cmd"] as Array<unknown>).filter(
+      (v) => typeof v === "string",
+    ) as Array<string>;
+    if (arr.length === 1) {
+      patch = arr[0];
+    } else if (arr.length >= 2 && arr[0] === "apply_patch") {
+      patch = arr.slice(1).join("\n");
+    }
+  } else if (typeof obj["cmd"] === "string") {
+    patch = obj["cmd"] as string;
+  }
+  if (typeof patch !== "string") {
+    return undefined;
+  }
+  const workdir =
+    typeof obj["workdir"] === "string" ? (obj["workdir"] as string) : undefined;
+  return { patch, workdir };
 }

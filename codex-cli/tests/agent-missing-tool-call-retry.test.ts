@@ -51,7 +51,7 @@ vi.mock("../src/utils/agent/log.js", () => ({
   isLoggingEnabled: () => false,
 }));
 
-import { AgentLoop } from "../src/utils/agent/agent-loop.ts";
+import { AgentLoop } from "../src/utils/agent/agent-loop.js";
 
 describe("AgentLoop – retry when missing tool call", () => {
   it("retries the request if no tool call is returned", async () => {
