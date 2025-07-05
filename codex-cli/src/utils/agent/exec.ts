@@ -15,7 +15,11 @@ import os from "os";
 import path from "path";
 import { parse } from "shell-quote";
 import { resolvePathAgainstWorkdir } from "src/approvals.js";
-import { PATCH_SUFFIX } from "src/parse-apply-patch.js";
+import {
+  PATCH_SUFFIX,
+  ADD_FILE_PREFIX,
+  UPDATE_FILE_PREFIX,
+} from "src/parse-apply-patch.js";
 
 const DEFAULT_TIMEOUT_MS = 10_000; // 10 seconds
 
@@ -90,6 +94,10 @@ export function execApplyPatch(
     .replace(/\*\*\* End Patch\nEOF('|")?/, "*** End Patch")
     .trim();
 
+  // If the patch tries to update a file that doesn't exist, convert it to an
+  // add operation so the patch succeeds.
+  applyPatchInput = adjustPatchForMissingFiles(applyPatchInput, workdir);
+
   if (!applyPatchInput.endsWith(PATCH_SUFFIX)) {
     applyPatchInput += "\n" + PATCH_SUFFIX;
   }
@@ -130,6 +138,21 @@ export function execApplyPatch(
       exitCode: 1,
     };
   }
+}
+
+function adjustPatchForMissingFiles(patch: string, workdir?: string): string {
+  const lines = patch.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+    if (line.startsWith(UPDATE_FILE_PREFIX)) {
+      const targetPath = line.slice(UPDATE_FILE_PREFIX.length).trim();
+      const resolved = resolvePathAgainstWorkdir(targetPath, workdir);
+      if (!fs.existsSync(resolved)) {
+        lines[i] = `${ADD_FILE_PREFIX}${targetPath}`;
+      }
+    }
+  }
+  return lines.join("\n");
 }
 
 export function getBaseCmd(cmd: Array<string>): string {

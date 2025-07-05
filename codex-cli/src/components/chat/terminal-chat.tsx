@@ -14,6 +14,7 @@ import { useConfirmation } from "../../hooks/use-confirmation.js";
 import { useTerminalSize } from "../../hooks/use-terminal-size.js";
 import { AgentLoop } from "../../utils/agent/agent-loop.js";
 import { ReviewDecision } from "../../utils/agent/review.js";
+import { runWorkflow, defaultWorkflow } from "../../workflow.js";
 import { generateCompactSummary } from "../../utils/compact-summary.js";
 import { saveConfig } from "../../utils/config.js";
 import { extractAppliedPatches as _extractAppliedPatches } from "../../utils/extract-applied-patches.js";
@@ -580,7 +581,12 @@ export default function TerminalChat({
               ]);
             }}
             submitInput={(inputs) => {
-              agent.run(inputs, lastResponseId || "").then(() => {
+              runWorkflow(
+                defaultWorkflow,
+                agent,
+                inputs,
+                lastResponseId || "",
+              ).then(() => {
                 if (exitAfterRun) {
                   // Wait one frame so Ink can flush the final output
                   setTimeout(() => {
