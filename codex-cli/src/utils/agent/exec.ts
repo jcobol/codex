@@ -4,7 +4,10 @@ import type { SpawnOptions } from "child_process";
 import type { ParseEntry } from "shell-quote";
 
 import { process_patch } from "./apply-patch.js";
-import { apply_search_replace_patch, PATCH_SUFFIX_SR } from "./apply-patch-sr.js";
+import {
+  apply_search_replace_patch,
+  PATCH_SUFFIX_SR,
+} from "./apply-patch-sr.js";
 import { SandboxType } from "./sandbox/interface.js";
 import { execWithLandlock } from "./sandbox/landlock.js";
 import { execWithSeatbelt } from "./sandbox/macos-seatbelt.js";
@@ -141,6 +144,7 @@ export function execApplyPatch(
       exitCode: 1,
     };
   }
+}
 
 export function execApplyPatchSr(
   patchText: string,
