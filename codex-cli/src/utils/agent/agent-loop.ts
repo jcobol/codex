@@ -21,7 +21,7 @@ import {
   AZURE_OPENAI_API_VERSION,
 } from "../config.js";
 import { log } from "../logger/log.js";
-import { parseToolCallArguments } from "../parsers.js";
+import { parseToolCallArguments, parseApplyPatchArguments } from "../parsers.js";
 import { getEnvironmentInfo } from "../platform-info.js";
 import { responsesCreateViaChatCompletions } from "../responses.js";
 import {
@@ -173,8 +173,6 @@ export class AgentLoop {
     analysis?: string;
     file_structure?: string;
   };
-  /** Tools advertised to the model for the current run. */
-  private availableTools: Array<Tool> = [];
 
   /**
    * A reference to the currently active stream returned from the OpenAI
@@ -598,11 +596,40 @@ export class AgentLoop {
       if (
         this.jsonResponse &&
         Array.isArray(args.cmd) &&
+        args.cmd[0] &&
         ["ls", "find"].includes(args.cmd[0])
       ) {
         this.jsonResponse.file_structure = outputText;
       }
 
+      if (additionalItemsFromExec) {
+        additionalItems.push(...additionalItemsFromExec);
+      }
+    } else if (name === "apply_patch") {
+      const args = parseApplyPatchArguments(rawArguments ?? "{}");
+      if (args == null) {
+        const invalid: ResponseInputItem.FunctionCallOutput = {
+          type: "function_call_output",
+          call_id: callId,
+          output: `invalid arguments: ${rawArguments}`,
+        };
+        return [invalid];
+      }
+      const execArgs = {
+        cmd: ["apply_patch", args.patch],
+        workdir: args.workdir,
+        timeoutInMillis: undefined,
+      };
+      const { outputText, metadata, additionalItems: additionalItemsFromExec } =
+        await handleExecCommand(
+          execArgs,
+          this.config,
+          this.approvalPolicy,
+          this.additionalWritableRoots,
+          this.getCommandConfirmation,
+          this.execAbortController?.signal,
+        );
+      outputItem.output = JSON.stringify({ output: outputText, metadata });
       if (additionalItemsFromExec) {
         additionalItems.push(...additionalItemsFromExec);
       }
@@ -817,7 +844,6 @@ export class AgentLoop {
       if (this.model.startsWith("codex")) {
         tools = [localShellTool, continueTool, lastResponseTool];
       }
-      this.availableTools = tools;
 
       const stripInternalFields = this.stripInternalFields.bind(this);
 
@@ -1658,6 +1684,68 @@ export class AgentLoop {
     }
   }
 
+  private parseTextToolCall(text: string): ResponseItem | null {
+    const trimmed = text.trim();
+    const match = trimmed.match(/\{[\s\S]*?\}/);
+    if (!match) return null;
+    try {
+      const obj = JSON.parse(match[0]) as Record<string, unknown>;
+      if (obj && typeof obj === "object") {
+        if (obj.name === "apply_patch") {
+          const args = parseApplyPatchArguments(JSON.stringify(obj.parameters ?? {}));
+          if (!args) return null;
+          return {
+            type: "local_shell_call" as any,
+            id: randomUUID(),
+            status: "completed",
+            call_id: randomUUID(),
+            action: {
+              type: "exec",
+              command: ["apply_patch", args.patch],
+              working_directory: args.workdir,
+              timeout_ms: undefined,
+            },
+          } as unknown as ResponseItem;
+        }
+        const args = parseToolCallArguments(JSON.stringify(obj));
+        if (!args) return null;
+        return {
+          type: "local_shell_call" as any,
+          id: randomUUID(),
+          status: "completed",
+          call_id: randomUUID(),
+          action: {
+            type: "exec",
+            command: args.cmd,
+            working_directory: args.workdir,
+            timeout_ms: args.timeoutInMillis,
+          },
+        } as unknown as ResponseItem;
+      }
+    } catch {
+      if (trimmed.includes('"name": "apply_patch"')) {
+        const startIdx = trimmed.indexOf('*** Begin Patch');
+        const endIdx = trimmed.indexOf('*** End Patch');
+        if (startIdx !== -1 && endIdx !== -1) {
+          const patch = trimmed.slice(startIdx, endIdx + '*** End Patch'.length);
+          return {
+            type: "local_shell_call" as any,
+            id: randomUUID(),
+            status: "completed",
+            call_id: randomUUID(),
+            action: {
+              type: "exec",
+              command: ["apply_patch", patch],
+              working_directory: undefined,
+              timeout_ms: undefined,
+            },
+          } as unknown as ResponseItem;
+        }
+      }
+    }
+    return null;
+  }
+
   // we need until we can depend on streaming events
   private async processEventsWithoutStreaming(
     output: Array<ResponseInputItem>,
@@ -1691,6 +1779,33 @@ export class AgentLoop {
         // eslint-disable-next-line no-await-in-loop
         const result = await this.handleLocalShellCall(item);
         turnInput.push(...result);
+      } else if (
+        item.type === "message" &&
+        (item as { role?: string }).role === "assistant"
+      ) {
+        const parts = (item as { content?: Array<{ type?: string; text?: string }> }).content;
+        if (
+          Array.isArray(parts) &&
+          parts.length === 1 &&
+          parts[0] &&
+          parts[0].type === "output_text"
+        ) {
+          const text = (parts[0].text || "").trim();
+          const parsed = this.parseTextToolCall(text);
+          if (parsed) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            if ((parsed as any).type === "local_shell_call") {
+              // eslint-disable-next-line no-await-in-loop, @typescript-eslint/no-explicit-any
+              const result = await this.handleLocalShellCall(parsed as any);
+              turnInput.push(...result);
+            } else {
+              // eslint-disable-next-line no-await-in-loop, @typescript-eslint/no-explicit-any
+              const result = await this.handleFunctionCall(parsed as any);
+              turnInput.push(...result);
+            }
+            continue;
+          }
+        }
       }
       emitItem(item as ResponseItem);
     }

@@ -74,7 +74,7 @@ importers:
         version: 15.0.8
       marked-terminal:
         specifier: ^7.3.0
-        version: 7.3.0(patch_hash=536fe9685e91d559cf29a033191aa39da45729949e9d1c69989255091c8618fb)(marked@15.0.8)
+        version: 7.3.0(marked@15.0.8)
       meow:
         specifier: ^13.2.0
         version: 13.2.0
@@ -121,6 +121,9 @@ importers:
       '@types/marked-terminal':
         specifier: ^6.1.1
         version: 6.1.1
+      '@types/node':
+        specifier: ^22.14.1
+        version: 22.14.1
       '@types/react':
         specifier: ^18.0.32
         version: 18.3.20
@@ -4519,7 +4522,7 @@ snapshots:
 
   make-error@1.3.6: {}
 
-  marked-terminal@7.3.0(patch_hash=536fe9685e91d559cf29a033191aa39da45729949e9d1c69989255091c8618fb)(marked@15.0.8):
+  marked-terminal@7.3.0(marked@15.0.8):
     dependencies:
       ansi-escapes: 7.0.0
       ansi-regex: 6.1.0

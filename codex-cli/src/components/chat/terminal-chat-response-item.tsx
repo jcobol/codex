@@ -177,6 +177,7 @@ function TerminalChatResponseToolCall({
   let workdir: string | undefined;
   let cmdReadableText: string | undefined;
   if (message.type === "function_call") {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const name = (message as any).name ?? (message as any).function?.name;
     if (name === "continue") {
       return (
