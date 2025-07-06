@@ -8,6 +8,7 @@ You can install any of these versions: `npm install -g codex@version`
 
 - Add node version check (#1007)
 - Persist token after refresh (#1006)
+- Return apply_patch parse errors without executing the shell command (#PR)
 
 ## `0.1.2505171619`
 
