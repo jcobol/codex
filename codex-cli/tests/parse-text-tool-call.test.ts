@@ -72,4 +72,34 @@ describe("parseTextToolCall", () => {
       action: { command: ["apply_patch", patch] },
     });
   });
+
+  it("handles various apply_patch response formats", () => {
+    const agent = createAgent();
+    const patch =
+      "*** Begin Patch\n*** Update File: foo.txt\n+hello world\n*** End Patch";
+
+    const json = JSON.stringify({ name: "apply_patch", parameters: { patch } });
+    const truncated = json.slice(0, json.length - 10);
+
+    const responses = [
+      json,
+      `Here is the patch:\n${json}\nDone`,
+      `\u0060\u0060\u0060json\n${json}\n\u0060\u0060\u0060`,
+      `${json}\nAdditional text.`,
+      truncated,
+    ];
+
+    const results = responses.map((text) =>
+      (agent as any).parseTextToolCall(text),
+    );
+
+    for (const r of results.slice(0, 4)) {
+      expect(r).toMatchObject({
+        type: "local_shell_call",
+        action: { command: ["apply_patch", patch] },
+      });
+    }
+
+    expect(results[4]).toBeNull();
+  });
 });
