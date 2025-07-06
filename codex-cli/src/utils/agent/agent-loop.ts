@@ -570,15 +570,16 @@ export class AgentLoop {
     // dispatch built-in shell tools directly, everything else is handled via a
     // generic fallback so that custom tools specified in `tools` work as well
     if (name === "container.exec" || name === "shell") {
-      const args = parseToolCallArguments(rawArguments ?? "{}");
-      if (args == null) {
+      const parsedArgs = parseToolCallArguments(rawArguments ?? "{}");
+      if (!parsedArgs.ok) {
         const invalid: ResponseInputItem.FunctionCallOutput = {
           type: "function_call_output",
           call_id: callId,
-          output: `invalid arguments: ${rawArguments}`,
+          output: `error: ${parsedArgs.error}`,
         };
         return [invalid];
       }
+      const args = parsedArgs.value;
       const {
         outputText,
         metadata,
@@ -1723,10 +1724,11 @@ export class AgentLoop {
             },
           } as unknown as ResponseItem;
         }
-        const args = parseToolCallArguments(JSON.stringify(obj));
-        if (!args) {
+        const parsedArgs = parseToolCallArguments(JSON.stringify(obj));
+        if (!parsedArgs.ok) {
           return null;
         }
+        const args = parsedArgs.value;
         return {
           type: "local_shell_call" as const,
           id: randomUUID(),
@@ -1811,12 +1813,13 @@ export class AgentLoop {
           const text = (parts[0].text || "").trim();
           const parsed = this.parseTextToolCall(text);
           if (parsed) {
+            // @ts-expect-error - local_shell_call is not part of ResponseItem union
             if ((parsed as ResponseItem).type === "local_shell_call") {
               // eslint-disable-next-line no-await-in-loop
               const result = await this.handleLocalShellCall(parsed as ResponseItem);
               turnInput.push(...result);
             } else {
-              // eslint-disable-next-line no-await-in-loop
+              // eslint-disable-next-line no-await-in-loop -- @ts-expect-error mismatched ResponseItem type
               const result = await this.handleFunctionCall(parsed as ResponseItem);
               turnInput.push(...result);
             }

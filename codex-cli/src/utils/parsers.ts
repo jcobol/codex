@@ -47,12 +47,12 @@ export type CommandReviewDetails = {
 export function parseToolCall(
   toolCall: ResponseFunctionToolCall,
 ): CommandReviewDetails | undefined {
-  const toolCallArgs = parseToolCallArguments(toolCall.arguments);
-  if (toolCallArgs == null) {
+  const result = parseToolCallArguments(toolCall.arguments);
+  if (!result.ok) {
     return undefined;
   }
 
-  const { cmd, workdir } = toolCallArgs;
+  const { cmd, workdir } = result.value;
   const cmdReadableText = formatCommandForDisplay(cmd);
 
   return {
@@ -67,19 +67,23 @@ export function parseToolCall(
  * with a "cmd" or "command" property that is an `Array<string>`, then returns
  * that array. Otherwise, returns undefined.
  */
+export type ParseToolCallArgumentsResult =
+  | { ok: true; value: ExecInput }
+  | { ok: false; error: string };
+
 export function parseToolCallArguments(
   toolCallArguments: string,
-): ExecInput | undefined {
+): ParseToolCallArgumentsResult {
   let json: unknown;
   try {
     json = JSON.parse(toolCallArguments);
   } catch (err) {
     log(`Failed to parse toolCall.arguments: ${toolCallArguments}`);
-    return undefined;
+    return { ok: false, error: String(err) };
   }
 
   if (typeof json !== "object" || json == null) {
-    return undefined;
+    return { ok: false, error: "arguments not an object" };
   }
 
   const { cmd, command } = json as Record<string, unknown>;
@@ -91,15 +95,18 @@ export function parseToolCallArguments(
     (typeof cmd === "string" ? [cmd] : undefined) ??
     (typeof command === "string" ? [command] : undefined);
   if (commandArray == null) {
-    return undefined;
+    return { ok: false, error: "missing command" };
   }
 
   // @ts-expect-error timeout and workdir may not exist on json.
   const { timeout, workdir } = json;
   return {
-    cmd: commandArray,
-    workdir: typeof workdir === "string" ? workdir : undefined,
-    timeoutInMillis: typeof timeout === "number" ? timeout : undefined,
+    ok: true,
+    value: {
+      cmd: commandArray,
+      workdir: typeof workdir === "string" ? workdir : undefined,
+      timeoutInMillis: typeof timeout === "number" ? timeout : undefined,
+    },
   };
 }
 
