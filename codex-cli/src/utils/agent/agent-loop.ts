@@ -1701,6 +1701,29 @@ export class AgentLoop {
       }
     }
     if (!obj) {
+      if (
+        trimmed.includes('apply_patch') &&
+        trimmed.includes('*** Begin Patch') &&
+        trimmed.includes('*** End Patch')
+      ) {
+        const startIdx = trimmed.indexOf('*** Begin Patch');
+        const endIdx = trimmed.indexOf('*** End Patch');
+        if (startIdx !== -1 && endIdx !== -1) {
+          const patch = trimmed.slice(startIdx, endIdx + '*** End Patch'.length);
+          return {
+            type: "local_shell_call" as const,
+            id: randomUUID(),
+            status: "completed",
+            call_id: randomUUID(),
+            action: {
+              type: "exec",
+              command: ["apply_patch", patch],
+              working_directory: undefined,
+              timeout_ms: undefined,
+            },
+          } as unknown as ResponseItem;
+        }
+      }
       return null;
     }
     try {
@@ -1741,7 +1764,11 @@ export class AgentLoop {
         } as unknown as ResponseItem;
       }
     } catch {
-      if (trimmed.includes('"name": "apply_patch"')) {
+      if (
+        trimmed.includes('apply_patch') &&
+        trimmed.includes('*** Begin Patch') &&
+        trimmed.includes('*** End Patch')
+      ) {
         const startIdx = trimmed.indexOf('*** Begin Patch');
         const endIdx = trimmed.indexOf('*** End Patch');
         if (startIdx !== -1 && endIdx !== -1) {
