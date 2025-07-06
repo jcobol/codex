@@ -1701,7 +1701,11 @@ export class AgentLoop {
       }
     }
     if (!obj) {
-      if (trimmed.includes('"name": "apply_patch"')) {
+      if (
+        trimmed.includes('apply_patch') &&
+        trimmed.includes('*** Begin Patch') &&
+        trimmed.includes('*** End Patch')
+      ) {
         const startIdx = trimmed.indexOf('*** Begin Patch');
         const endIdx = trimmed.indexOf('*** End Patch');
         if (startIdx !== -1 && endIdx !== -1) {
@@ -1760,7 +1764,11 @@ export class AgentLoop {
         } as unknown as ResponseItem;
       }
     } catch {
-      if (trimmed.includes('"name": "apply_patch"')) {
+      if (
+        trimmed.includes('apply_patch') &&
+        trimmed.includes('*** Begin Patch') &&
+        trimmed.includes('*** End Patch')
+      ) {
         const startIdx = trimmed.indexOf('*** Begin Patch');
         const endIdx = trimmed.indexOf('*** End Patch');
         if (startIdx !== -1 && endIdx !== -1) {
