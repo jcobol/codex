@@ -32,6 +32,10 @@ import {
 } from "../session.js";
 import { applyPatchToolInstructions } from "./apply-patch.js";
 import { handleExecCommand } from "./handle-exec-command.js";
+import {
+  initializeJsonResponse,
+  type JsonResponse,
+} from "../response-handler.js";
 import { HttpsProxyAgent } from "https-proxy-agent";
 import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -208,6 +212,8 @@ export class AgentLoop {
   private terminated = false;
   /** Master abort controller – fires when terminate() is invoked. */
   private readonly hardAbort = new AbortController();
+
+  private jsonResponse: JsonResponse | null = null;
 
   /**
    * Abort the ongoing request/stream, if any. This allows callers (typically
@@ -592,6 +598,12 @@ export class AgentLoop {
         this.execAbortController?.signal,
       );
       outputItem.output = JSON.stringify({ output: outputText, metadata });
+      if (this.jsonResponse) {
+        this.jsonResponse.analysis += `${outputText}\n`;
+        if (metadata.exit_code && metadata.exit_code !== 0) {
+          this.jsonResponse.errors.push(outputText.trim());
+        }
+      }
 
       if (
         this.jsonResponse &&
@@ -730,6 +742,12 @@ export class AgentLoop {
       this.execAbortController?.signal,
     );
     outputItem.output = JSON.stringify({ output: outputText, metadata });
+    if (this.jsonResponse) {
+      this.jsonResponse.analysis += `${outputText}\n`;
+      if (metadata.exit_code && metadata.exit_code !== 0) {
+        this.jsonResponse.errors.push(outputText.trim());
+      }
+    }
 
     if (
       this.jsonResponse &&
@@ -784,6 +802,7 @@ export class AgentLoop {
       log(
         `AgentLoop.run(): new execAbortController created (${this.execAbortController.signal}) for generation ${this.generation}`,
       );
+      this.jsonResponse = initializeJsonResponse();
       // NOTE: We no longer (re‑)attach an `abort` listener to `hardAbort` here.
       // A single listener that forwards the `abort` to the current
       // `execAbortController` is installed once in the constructor. Re‑adding a
@@ -1535,6 +1554,9 @@ export class AgentLoop {
         //   ],
         // });
 
+        if (this.jsonResponse) {
+          this.jsonResponse.status = "completed";
+        }
         this.onLoading(false);
       };
 
