@@ -1274,6 +1274,13 @@ async fn handle_container_exec_with_params(
         }
         MaybeApplyPatchVerified::ShellParseError(error) => {
             trace!("Failed to parse shell command, {error:?}");
+            return ResponseInputItem::FunctionCallOutput {
+                call_id,
+                output: FunctionCallOutputPayload {
+                    content: format!("error: {error:?}"),
+                    success: None,
+                },
+            };
         }
         MaybeApplyPatchVerified::NotApplyPatch => (),
     }
@@ -1935,5 +1942,57 @@ fn record_conversation_history(disable_response_storage: bool, wire_api: WireApi
     match wire_api {
         WireApi::Responses => false,
         WireApi::Chat => true,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[tokio::test]
+    async fn apply_patch_parse_error_returns_function_output() {
+        let (tx_event, rx_event) = async_channel::unbounded();
+        let tmp = TempDir::new().unwrap();
+        let provider = crate::model_provider_info::ModelProviderInfo {
+            name: "mock".into(),
+            base_url: "http://localhost".into(),
+            env_key: None,
+            env_key_instructions: None,
+            wire_api: crate::model_provider_info::WireApi::Responses,
+        };
+        let client = ModelClient::new("test", provider, Default::default(), Default::default());
+        let sess = Session {
+            client,
+            tx_event: tx_event.clone(),
+            ctrl_c: Arc::new(Notify::new()),
+            cwd: tmp.path().to_path_buf(),
+            instructions: None,
+            approval_policy: AskForApproval::Never,
+            sandbox_policy: SandboxPolicy::new_full_auto_policy(),
+            shell_environment_policy: ShellEnvironmentPolicy::default(),
+            writable_roots: Mutex::new(Vec::new()),
+            mcp_connection_manager: McpConnectionManager::default(),
+            notify: None,
+            rollout: Mutex::new(None),
+            state: Mutex::new(State::default()),
+            codex_linux_sandbox_exe: None,
+        };
+
+        let params = ExecParams {
+            command: vec!["apply_patch".into(), "*** Begin Patch".into()],
+            cwd: tmp.path().to_path_buf(),
+            timeout_ms: None,
+            env: Default::default(),
+        };
+
+        let result = handle_container_exec_with_params(params, &sess, "sub".into(), "call".into()).await;
+        match result {
+            ResponseInputItem::FunctionCallOutput { output, .. } => {
+                assert!(output.contains("error"));
+            }
+            other => panic!("unexpected result: {other:?}"),
+        }
+        assert!(rx_event.try_recv().is_err(), "no events should be emitted");
     }
 }
