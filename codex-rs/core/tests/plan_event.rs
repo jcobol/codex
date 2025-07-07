@@ -11,11 +11,21 @@ use tempfile::TempDir;
 use test_support::load_default_config_for_test;
 use tokio::time::timeout;
 use wiremock::matchers::{method, path};
-use wiremock::{Mock, MockServer, ResponseTemplate};
+use wiremock::{Mock, MockServer, ResponseTemplate, Respond, Request};
 
 fn sse_completed(id: &str) -> String {
     format!(
         "event: response.completed\ndata: {{\"type\":\"response.completed\",\"response\":{{\"id\":\"{}\",\"output\":[]}}}}\n\n\n",
+        id
+    )
+}
+
+fn sse_plan(id: &str) -> String {
+    format!(
+        "event: response.output_item.done\n\
+data: {{\"type\":\"response.output_item.done\",\"item\":{{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{{\"type\":\"output_text\",\"text\":\"plan\"}}]}}}}\n\n\
+event: response.completed\n\
+data: {{\"type\":\"response.completed\",\"response\":{{\"id\":\"{}\",\"output\":[]}}}}\n\n\n",
         id
     )
 }
@@ -28,13 +38,29 @@ async fn emits_plan_event_first() {
     }
 
     let server = MockServer::start().await;
+
+    struct SeqResponder;
+    impl Respond for SeqResponder {
+        fn respond(&self, _: &Request) -> ResponseTemplate {
+            use std::sync::atomic::{AtomicUsize, Ordering};
+            static CALLS: AtomicUsize = AtomicUsize::new(0);
+            let n = CALLS.fetch_add(1, Ordering::SeqCst);
+            if n == 0 {
+                ResponseTemplate::new(200)
+                    .insert_header("content-type", "text/event-stream")
+                    .set_body_raw(sse_plan("plan"), "text/event-stream")
+            } else {
+                ResponseTemplate::new(200)
+                    .insert_header("content-type", "text/event-stream")
+                    .set_body_raw(sse_completed("resp"), "text/event-stream")
+            }
+        }
+    }
+
     Mock::given(method("POST"))
         .and(path("/v1/responses"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .insert_header("content-type", "text/event-stream")
-                .set_body_raw(sse_completed("resp"), "text/event-stream"),
-        )
+        .respond_with(SeqResponder {})
+        .expect(1)
         .mount(&server)
         .await;
 
@@ -80,7 +106,7 @@ async fn emits_plan_event_first() {
         .unwrap()
         .unwrap();
     match ev.msg {
-        EventMsg::AgentPlan(_) => {}
+        EventMsg::AgentPlan(e) => assert_eq!(e.plan, "plan"),
         other => panic!("unexpected event: {:?}", other),
     }
 }
