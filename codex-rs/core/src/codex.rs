@@ -61,6 +61,7 @@ use crate::models::ResponseItem;
 use crate::models::ShellToolCallParams;
 use crate::project_doc::get_user_instructions;
 use crate::protocol::AgentMessageEvent;
+use crate::protocol::AgentPlanEvent;
 use crate::protocol::AgentReasoningEvent;
 use crate::protocol::ApplyPatchApprovalRequestEvent;
 use crate::protocol::AskForApproval;
@@ -805,6 +806,16 @@ async fn run_task(sess: Arc<Session>, sub_id: String, input: Vec<InputItem>) {
     if sess.tx_event.send(event).await.is_err() {
         return;
     }
+
+    // Send initial plan event. This is a placeholder implementation that will
+    // eventually query the model for a concrete plan.
+    sess.send_event(Event {
+        id: sub_id.clone(),
+        msg: EventMsg::AgentPlan(AgentPlanEvent {
+            plan: "planning not implemented".to_string(),
+        }),
+    })
+    .await;
 
     let initial_input_for_turn = ResponseInputItem::from(input);
     sess.record_conversation_items(&[initial_input_for_turn.clone().into()])
@@ -1986,7 +1997,8 @@ mod tests {
             env: Default::default(),
         };
 
-        let result = handle_container_exec_with_params(params, &sess, "sub".into(), "call".into()).await;
+        let result =
+            handle_container_exec_with_params(params, &sess, "sub".into(), "call".into()).await;
         match result {
             ResponseInputItem::FunctionCallOutput { output, .. } => {
                 assert!(output.contains("error"));
