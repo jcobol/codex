@@ -6,6 +6,7 @@ import type { ResponseFunctionToolCall } from "openai/resources/responses/respon
 
 import { log } from "node:console";
 import { formatCommandForDisplay } from "../format-command.js";
+import { parse as shellParse } from "shell-quote";
 
 // The console utility import is intentionally explicit to avoid bundlers from
 // including the entire `console` module when only the `log` function is
@@ -92,8 +93,8 @@ export function parseToolCallArguments(
   const commandArray =
     toStringArray(cmd) ??
     toStringArray(command) ??
-    (typeof cmd === "string" ? [cmd] : undefined) ??
-    (typeof command === "string" ? [command] : undefined);
+    (typeof cmd === "string" ? maybeSplitString(cmd) : undefined) ??
+    (typeof command === "string" ? maybeSplitString(command) : undefined);
   if (commandArray == null) {
     return { ok: false, error: "missing command" };
   }
@@ -117,6 +118,18 @@ function toStringArray(obj: unknown): Array<string> | undefined {
   } else {
     return undefined;
   }
+}
+
+function maybeSplitString(command: string): Array<string> {
+  try {
+    const parsed = shellParse(command);
+    if (parsed.every((p) => typeof p === "string")) {
+      return parsed as Array<string>;
+    }
+  } catch {
+    /* ignore */
+  }
+  return [command];
 }
 
 export function parseApplyPatchArguments(
