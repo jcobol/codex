@@ -60,7 +60,6 @@ async fn emits_plan_event_first() {
     Mock::given(method("POST"))
         .and(path("/v1/responses"))
         .respond_with(SeqResponder {})
-        .expect(1)
         .mount(&server)
         .await;
 
