@@ -8,5 +8,6 @@ export default defineConfig({
   test: {
     threads: false,
     environment: "node",
+    env: { SKIP_PLAN_GENERATION: "1" },
   },
 });
