@@ -183,7 +183,7 @@ impl EventProcessor {
             EventMsg::AgentPlan(AgentPlanEvent { plan }) => {
                 ts_println!(
                     self,
-                    "{}\n{}",
+                    "{}: {}",
                     "plan".style(self.italic).style(self.magenta),
                     plan
                 );
