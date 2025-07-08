@@ -7,6 +7,7 @@ use codex_core::protocol::BackgroundEventEvent;
 use codex_core::protocol::ErrorEvent;
 use codex_core::protocol::Event;
 use codex_core::protocol::EventMsg;
+use codex_core::protocol::AgentPlanEvent;
 use codex_core::protocol::ExecCommandBeginEvent;
 use codex_core::protocol::ExecCommandEndEvent;
 use codex_core::protocol::FileChange;
@@ -178,6 +179,14 @@ impl EventProcessor {
             }
             EventMsg::TaskStarted | EventMsg::TaskComplete(_) => {
                 // Ignore.
+            }
+            EventMsg::AgentPlan(AgentPlanEvent { plan }) => {
+                ts_println!(
+                    self,
+                    "{}: {}",
+                    "plan".style(self.italic).style(self.magenta),
+                    plan
+                );
             }
             EventMsg::AgentMessage(AgentMessageEvent { message }) => {
                 ts_println!(

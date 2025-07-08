@@ -412,6 +412,54 @@ export class AgentLoop {
     return clean as unknown as ResponseInputItem;
   }
 
+  private async generatePlan(
+    input: Array<ResponseInputItem>,
+  ): Promise<string> {
+    if (process.env.SKIP_PLAN_GENERATION) {
+      return "";
+    }
+    try {
+      let reasoning: Reasoning | undefined;
+      if (this.model.startsWith("o") || this.model.startsWith("codex")) {
+        reasoning = { effort: this.config.reasoningEffort ?? "medium", summary: "auto" };
+      }
+
+      const instructions =
+        (this.instructions ? this.instructions + "\n" : "") +
+        "Before taking any action, briefly outline your plan.";
+
+      const stream = await this.oai.responses.create({
+        model: this.model,
+        instructions,
+        input,
+        stream: true,
+        parallel_tool_calls: false,
+        reasoning,
+        store: false,
+        tool_choice: "none",
+      });
+
+      let plan = "";
+      for await (const event of stream as AsyncIterable<ResponseEvent>) {
+        if (event.type === "response.output_item.done") {
+          const item = event.item as any;
+          if (item.type === "message" && Array.isArray(item.content)) {
+            for (const part of item.content) {
+              if (part.type === "output_text" || part.type === "text") {
+                plan += part.text;
+              }
+            }
+          }
+        } else if (event.type === "response.completed") {
+          break;
+        }
+      }
+      return plan.trim();
+    } catch {
+      return "";
+    }
+  }
+
   private isRateLimitError(e: unknown): boolean {
     if (!e || typeof e !== "object") {
       return false;
@@ -865,6 +913,16 @@ export class AgentLoop {
         );
       } else {
         turnInput = [...abortOutputs, ...input].map(stripInternalFields);
+      }
+
+      const plan = await this.generatePlan(turnInput);
+      if (plan) {
+        this.onItem({
+          id: `plan-${Date.now()}`,
+          type: "message",
+          role: "assistant",
+          content: [{ type: "text", text: plan }],
+        });
       }
 
       this.onLoading(true);

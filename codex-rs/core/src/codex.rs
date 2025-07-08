@@ -61,6 +61,7 @@ use crate::models::ResponseItem;
 use crate::models::ShellToolCallParams;
 use crate::project_doc::get_user_instructions;
 use crate::protocol::AgentMessageEvent;
+use crate::protocol::AgentPlanEvent;
 use crate::protocol::AgentReasoningEvent;
 use crate::protocol::ApplyPatchApprovalRequestEvent;
 use crate::protocol::AskForApproval;
@@ -806,8 +807,20 @@ async fn run_task(sess: Arc<Session>, sub_id: String, input: Vec<InputItem>) {
         return;
     }
 
-    let initial_input_for_turn = ResponseInputItem::from(input);
-    sess.record_conversation_items(&[initial_input_for_turn.clone().into()])
+    let initial_input_for_turn = ResponseInputItem::from(input.clone());
+    let plan = match generate_plan(&sess, vec![initial_input_for_turn.clone().into()]).await {
+        Ok(p) if !p.is_empty() => p,
+        Ok(_) | Err(_) => "planning not implemented".to_string(),
+    };
+    sess
+        .send_event(Event {
+            id: sub_id.clone(),
+            msg: EventMsg::AgentPlan(AgentPlanEvent { plan }),
+        })
+        .await;
+
+    sess
+        .record_conversation_items(&[initial_input_for_turn.clone().into()])
         .await;
 
     let mut input_for_next_turn: Vec<ResponseInputItem> = vec![initial_input_for_turn];
@@ -1945,6 +1958,42 @@ fn record_conversation_history(disable_response_storage: bool, wire_api: WireApi
     }
 }
 
+async fn generate_plan(sess: &Session, input: Vec<ResponseItem>) -> CodexResult<String> {
+    use crate::chat_completions::AggregateStreamExt;
+
+    let extra_tools = sess.mcp_connection_manager.list_all_tools();
+    let mut instructions = sess.instructions.clone().unwrap_or_default();
+    if !instructions.is_empty() {
+        instructions.push('\n');
+    }
+    instructions.push_str("Before taking any action, briefly outline your plan.");
+
+    let prompt = Prompt {
+        input,
+        prev_id: None,
+        user_instructions: Some(instructions),
+        store: false,
+        extra_tools,
+    };
+
+    let mut stream = sess.client.clone().stream(&prompt).await?.aggregate();
+    let mut plan = String::new();
+    while let Some(event) = stream.next().await {
+        match event? {
+            ResponseEvent::OutputItemDone(ResponseItem::Message { content, .. }) => {
+                for item in content {
+                    if let ContentItem::OutputText { text } = item {
+                        plan.push_str(&text);
+                    }
+                }
+            }
+            ResponseEvent::Completed { .. } => break,
+            _ => {}
+        }
+    }
+    Ok(plan.trim().to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1986,7 +2035,8 @@ mod tests {
             env: Default::default(),
         };
 
-        let result = handle_container_exec_with_params(params, &sess, "sub".into(), "call".into()).await;
+        let result =
+            handle_container_exec_with_params(params, &sess, "sub".into(), "call".into()).await;
         match result {
             ResponseInputItem::FunctionCallOutput { output, .. } => {
                 assert!(output.contains("error"));
